@@ -38,7 +38,7 @@ l’appli et la relance.
 - `MATHEO_GALLERY=1 cargo run` : tous ses états côte à côte ; `MATHEO_CLOCK=late|friday` force l’heure (builds de debug seulement).
 - `cargo test`, `cargo clippy`.
 - L’icône : `scripts/make-icon.py` (Pillow) écrit `assets/icon.png`, `Matheo.icns`, `matheo.ico`.
-- Le code de Mathéo vient de Ronnie (`src/app/desktop.rs`) : un changement de ce côté se reporte ici à la main.
+- Le code de Mathéo vient de Ronnie (`src/app/desktop.rs`, `src/i18n.rs`) : `python3 scripts/sync/gen.py` regénère `src/overlay.rs` et `src/i18n.rs` depuis `../bipbip` (ou `RONNIE_DIR`). Ce qui est propre à l’appli (fenêtre, menu, mise à jour) se change dans `scripts/sync/overlay_head.rs`, pas dans `src/overlay.rs`.
 
 ## Publier
 
