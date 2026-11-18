@@ -22,7 +22,7 @@ Ronnie (où Mathéo est une récompense de Riff Hero), pour macOS, Windows et Li
 - Vendredi après 14 h : lunettes noires. Après 23 h : fatigué, « va te coucher ». 2 h sans pause : il insiste.
 - Attrapé, lancé (physique, rebonds), secoué (6 allers-retours vifs) : muet 6 h.
 - macOS : posé sur le Dock grâce à l’Accessibilité (demandée au premier lancement, et dans son menu tant qu’elle manque) ; sans elle, juste au-dessus.
-- Clic droit sur lui : son menu (conseils, se taire, lancer au démarrage, langue, sa page, installer la mise à jour, quitter).
+- Clic droit sur lui : son menu (sa version, conseils, se taire, lancer au démarrage, langue, son site, installer la mise à jour, quitter).
 - Une seule instance à la fois (port local 47391). Lancé au démarrage dès la première fois (LaunchAgent, clé Run, ~/.config/autostart).
 - Pas de Gérard ni de horde ici : ce sont des compagnons de Ronnie.
 

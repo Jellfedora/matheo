@@ -13,5 +13,5 @@ Première version : Mathéo, la plante verte de Ronnie, en appli à part pour ma
 - **Le vendredi après-midi**, lunettes noires et week-end en vue ; **après 23 h**, il bâille et t’envoie te coucher.
 - **Attrape-le, lance-le** (il rebondit sur les bords de l’écran), **secoue-le** pour qu’il se taise 6 h.
 - **Sur le Dock** (macOS, avec l’autorisation Accessibilité, demandée au premier lancement), tout en bas de l’écran à côté.
-- **Son menu, d’un clic droit sur lui** : ses conseils, le faire taire, le lancer au démarrage (activé d’office), la langue, sa page, quitter.
+- **Son menu, d’un clic droit sur lui** : sa version, ses conseils, le faire taire, le lancer au démarrage (activé d’office), la langue, son site, quitter.
 - **Ses mises à jour** : quand une nouvelle version sort, il le dit ; un clic sur sa bulle l’installe et il se relance tout seul.

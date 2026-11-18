@@ -874,6 +874,8 @@ fn paint_matheo_as(painter: &egui::Painter, foot: Pos2, size: f32, now: f64, loo
 /// What his menu does.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Choice {
+    /// His version, shown at the top (nothing to do).
+    Version,
     Tips,
     Quiet,
     Autostart,
@@ -891,6 +893,7 @@ const ROW_H: f32 = 30.0;
 fn menu_rows(settings: &Settings, quiet: bool) -> Vec<(String, Option<bool>, Choice)> {
     let t = settings.lang.strings();
     let mut rows = vec![
+        (t.menu_version.replace("{v}", crate::update::VERSION), None, Choice::Version),
         (t.menu_tips_on.to_owned(), Some(settings.tips), Choice::Tips),
         ((if quiet { t.menu_speak } else { t.menu_quiet }).to_owned(), None, Choice::Quiet),
         (t.menu_autostart.to_owned(), Some(settings.autostart), Choice::Autostart),
@@ -926,10 +929,11 @@ fn paint_menu(painter: &egui::Painter, rect: Rect, rows: &[(String, Option<bool>
     painter.rect(rect, 12.0, Color32::from_rgb(250, 248, 234), Stroke::new(1.5, Color32::from_rgb(104, 156, 84)), egui::StrokeKind::Inside);
     for (i, (label, switch, choice)) in rows.iter().enumerate() {
         let row = Rect::from_min_size(rect.min + Vec2::new(6.0, 6.0 + i as f32 * ROW_H), Vec2::new(rect.width() - 12.0, ROW_H));
-        if hover == Some(i) {
+        if hover == Some(i) && *choice != Choice::Version {
             painter.rect_filled(row, 8.0, Color32::from_rgb(222, 238, 206));
         }
         let color = match choice {
+            Choice::Version => Color32::from_rgb(130, 140, 120),
             Choice::Quit => Color32::from_rgb(170, 60, 50),
             Choice::Install => Color32::from_rgb(40, 120, 40),
             _ => ink,
@@ -1058,6 +1062,7 @@ impl Overlay {
             }
             Choice::Autostart => self.settings.autostart = crate::autostart::set(!self.settings.autostart),
             Choice::Lang => self.settings.lang = self.settings.lang.other(),
+            Choice::Version => {}
             Choice::Page => crate::open(crate::PAGE),
             Choice::Install => {
                 crate::update::install();
