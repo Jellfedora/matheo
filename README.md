@@ -7,7 +7,7 @@ Ronnie (où Mathéo est une récompense de Riff Hero), pour macOS, Windows et Li
 
 | | |
 |---|---|
-| **Code** | ce dépôt, GitHub `Jellfedora/matheo` (**privé**), branche `main` |
+| **Code** | ce dépôt, GitHub `Jellfedora/matheo` (public), branche `main` |
 | **Téléchargement** | https://185.245.143.130/floor/matheo — la page de Mathéo sur floor, à côté de celle de Ronnie |
 | **Versions hébergées** | sur floor (VM ronnie-bot), API `https://185.245.143.130/floor/v1/matheo` : `GET /release`, `GET /files/:version/:name`, publication `PUT /releases/...` avec le jeton |
 | **Archives** | `matheo-universal-apple-darwin.tar.gz` (Mathéo.app, Apple Silicon), `matheo-x86_64-pc-windows-msvc.zip` (matheo.exe), `matheo-x86_64-unknown-linux-gnu.tar.gz` (matheo) |
@@ -46,5 +46,5 @@ l’appli et la relance.
 2. `scripts/release.sh X.Y.Z` : version, commit, tag, push. La CI (`.github/workflows/release.yml`) compile les trois
    systèmes et publie sur floor (secrets du dépôt : `RONNIE_UPDATE_KEY`, `FLOOR_PUBLISH_TOKEN`,
    `MACOS_SIGN_P12`, `MACOS_SIGN_P12_PASSWORD`).
-3. Dépôt privé : les minutes GitHub Actions comptent (macOS ×10, Windows ×2). Le quota avait été épuisé
-   le 2026-11-10 pour Ronnie.
+3. Dépôt public : les minutes GitHub Actions sont gratuites (en privé, le quota avait été épuisé
+   le 2026-11-10 pour Ronnie).
