@@ -1,0 +1,123 @@
+# A vX.Y.Z tag (scripts/release.sh) builds Mathéo for macOS, Linux and Windows, then publishes the
+# archives, signed, on floor: Mathéo updates from there, his page (floor /matheo) offers them. Nothing
+# is published unless every build succeeded, so no system ever misses its archive.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        # The oldest Ubuntu: the binary then works with older glibc versions too.
+        os: [macos-latest, ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+      - name: Tag matches Cargo.toml version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME but Cargo.toml says $version" >&2
+            exit 1
+          fi
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxkbcommon-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+
+      - name: Tests
+        run: cargo test --locked
+
+      # Ronnie's self-signed certificate (MACOS_SIGN_P12, base64, and its password): the same
+      # signature from one version to the next keeps the Accessibility permission. Without the
+      # secrets, package.sh signs ad hoc.
+      - name: macOS signing certificate
+        if: runner.os == 'macOS'
+        env:
+          P12: ${{ secrets.MACOS_SIGN_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_SIGN_P12_PASSWORD }}
+        run: |
+          if [ -z "$P12" ]; then
+            echo "::warning::No MACOS_SIGN_P12 secret: ad-hoc signature"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/sign.keychain-db"
+          pass=$(openssl rand -hex 16)
+          echo "$P12" | base64 --decode >"$RUNNER_TEMP/sign.p12"
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          security import "$RUNNER_TEMP/sign.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$pass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/sign.p12"
+          echo "SIGN_IDENTITY=Ronnie Code Signing" >>"$GITHUB_ENV"
+
+      - name: Package
+        run: scripts/package.sh
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: matheo-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: src
+
+      # The release notes: this version's section of CHANGELOG.md.
+      - name: Release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            /^## \[/ { if (found) exit; if (index($0, "[" v "]")) { found = 1; next } }
+            found { print }
+          ' src/CHANGELOG.md > notes.md
+          cat notes.md
+
+      # The archives on floor, each signed with the release key (Ronnie's): its private half stays in
+      # this secret, Mathéo checks the signature with the public half he carries (src/update.rs).
+      - name: Publish on floor
+        env:
+          RONNIE_UPDATE_KEY: ${{ secrets.RONNIE_UPDATE_KEY }}
+          FLOOR_TOKEN: ${{ secrets.FLOOR_PUBLISH_TOKEN }}
+          FLOOR_URL: https://185.245.143.130/floor
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          umask 077
+          printf '%s\n' "$RONNIE_UPDATE_KEY" > update-key.pem
+          trap 'rm -f update-key.pem' EXIT
+          for f in dist/*; do
+            name=$(basename "$f")
+            sig=$(openssl pkeyutl -sign -inkey update-key.pem -rawin -in "$f" | base64 -w0)
+            curl --fail-with-body -sS --retry 3 -T "$f" -H "Authorization: Bearer $FLOOR_TOKEN" -H "X-Signature: $sig" \
+              -H "Content-Type: application/octet-stream" "$FLOOR_URL/v1/matheo/releases/$version/files/$name"
+            echo
+          done
+          # Every archive is there: the version becomes the latest, with its notes.
+          jq -n --rawfile notes notes.md '{notes: $notes}' | curl --fail-with-body -sS --retry 3 -X PUT \
+            -H "Authorization: Bearer $FLOOR_TOKEN" -H "Content-Type: application/json" --data-binary @- "$FLOOR_URL/v1/matheo/releases/$version"

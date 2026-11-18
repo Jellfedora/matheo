@@ -1,0 +1,47 @@
+[package]
+name = "matheo"
+version = "0.1.0"
+edition = "2024"
+description = "Mathéo, la plante verte qui veille sur toi en bas de l'écran."
+publish = false
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+ring = "0.17"
+sha2 = "0.11"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+directories = "6"
+eframe = { version = "0.36", default-features = false, features = ["wgpu", "default_fonts", "x11"] }
+egui = "0.36"
+raw-window-handle = "0.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "3", features = ["json"] }
+
+[target.'cfg(unix)'.dependencies]
+flate2 = "1"
+tar = "0.4"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+self-replace = "1"
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+x11rb = { version = "0.13", features = ["randr"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+winit = { version = "0.30", default-features = false }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSApplication", "NSCursor", "NSResponder", "NSRunningApplication", "NSScreen", "NSView", "NSWindow", "NSWorkspace"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSGeometry", "NSProcessInfo", "NSString", "NSURL"] }
+
+[target."cfg(windows)".dependencies]
+zip = { version = "8", default-features = false, features = ["deflate"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
+
+[target."cfg(windows)".build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+lto = "thin"
+strip = true
