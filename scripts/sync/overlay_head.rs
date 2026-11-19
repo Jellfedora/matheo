@@ -49,6 +49,8 @@ struct Overlay {
     /// The windows over the other screens, by screen: kept a while once nothing goes along them
     /// (hidden), not made again each time.
     others: std::collections::HashMap<usize, Other>,
+    /// The season's outfit he wears (Christmas, Halloween...), looked at each minute.
+    season: Option<Season>,
     /// Windows: frames left to clear what stays behind the drawing (see `glass`), after a change
     /// that may have made it white.
     glass: u8,
@@ -221,7 +223,7 @@ pub(crate) fn run(settings: Settings) {
                     crate::access::ask();
                 }
             }
-            Ok(Box::new(Overlay { mouse, settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), glass: GLASS }))
+            Ok(Box::new(Overlay { mouse, settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), glass: GLASS }))
         }),
     );
     if let Err(e) = result {
@@ -294,7 +296,9 @@ impl eframe::App for Overlay {
         if self.full.1.is_none_or(|t| t.elapsed() >= Duration::from_secs(1)) {
             let all = os::screens();
             let screens: Vec<Rect> = if all.is_empty() { vec![self.screen] } else { all.into_iter().map(|s| s.0).collect() };
-            self.full = (screens.into_iter().filter(|s| os::full_screen(*s)).collect(), Some(Instant::now()));
+            // Not for Ronnie (full screen too): he stays over it.
+            let ronnie = crate::ronnie::in_front();
+            self.full = (screens.into_iter().filter(|s| !ronnie && os::full_screen(*s)).collect(), Some(Instant::now()));
             // Linux: the window manager told about our windows once it lists them (Windows: their
             // frame taken off again, should one have slipped through).
             #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
@@ -401,53 +405,37 @@ impl eframe::App for Overlay {
         if self.matheo.tired.1.is_none_or(|t| t.elapsed() >= Duration::from_secs(60)) {
             self.matheo.tired = (late(), Some(Instant::now()));
             self.matheo.friday = friday();
+            self.season = Season::now();
         }
         let m = &self.matheo;
         let look = m.look(m.tired.0, m.friday);
         let can = m.at.zip(m.can).map(|(at, (since, pour))| can_view(at, can_side(at, &works), since, pour));
         let plant = m.at.map(|at| (at, look));
+        let season = self.season;
         let tip = m.tip.map(|(said, _)| said.text(self.settings.lang));
 
         let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("matheo")));
         let mut busy = plant_busy;
         let mut next: f32 = 1.0;
         let here = screens.iter().position(|(s, _)| (s.min - self.screen.min).length() < 1.0).unwrap_or(0);
-        // Just sent to another screen, this window isn't there yet (the system hasn't told its new
-        // place, macOS may slide it under the menu bar): drawn from its old place, Mathéo would jump.
-        // Meanwhile he stays drawn by the window over his screen.
-        let settled = ctx.input(|i| i.viewport().inner_rect).is_none_or(|r| self.screen.contains(r.center()));
-        if !settled {
-            next = next.min(0.02);
-        }
-        // Mathéo on the screen he's on (this window's, or another's).
+        // Mathéo on the screen he's on.
         let plant_on = plant.map(|(at, _)| screens.iter().position(|(s, _)| s.contains(at - Vec2::new(0.0, 1.0))).unwrap_or(here));
-        if let (Some((at, look)), true) = (plant, settled && plant_on == Some(here)) {
-            paint_matheo_as(&painter, at - origin.to_vec2(), MATHEO_H, now, look);
-            if let Some(can) = can {
-                paint_can(&painter, can, origin.to_vec2());
-            }
-            if let Some(text) = tip {
-                let bounds = self.screen.translate(-origin.to_vec2());
-                self.matheo.bubble = Some(paint_matheo_tip(&painter, at - origin.to_vec2(), text, bounds).translate(origin.to_vec2()));
-            }
-            next = next.min(0.1);
-        }
         if let Some(menu) = self.menu.map(|at| menu_rect(at, rows.len(), self.screen)) {
             paint_menu(&painter, menu.translate(-origin.to_vec2()), &rows, hover);
             busy = true;
         }
-        // A window over another screen is made hidden, shown once drawn (else, on Windows, a white
-        // square first), hidden again when he's no longer there, closed a while after. The one over
-        // his screen is also kept ready, hidden, while this window is there: when it follows the
-        // pointer away, he goes on showing at once, at the same place.
+        // Mathéo is drawn by a window of his own over his screen, never by this one: this one follows
+        // the pointer from screen to screen (for his menu), he stays still meanwhile (drawn by the
+        // window going away, then by the one arriving, he jumped a little at each change). His window
+        // is made hidden, shown once drawn (else, on Windows, a white square first), hidden again
+        // when he's no longer on its screen, closed a while after.
         for (i, (screen, _)) in screens.iter().enumerate() {
-            let mine = settled && i == here;
-            let needed = plant_on == Some(i) && !mine;
+            let needed = plant_on == Some(i);
             if covered(&self.full.0, *screen) {
                 self.others.remove(&i);
                 continue;
             }
-            if needed || (mine && plant_on == Some(i) && screens.len() > 1) {
+            if needed {
                 self.others.entry(i).or_insert(Other { frames: 0, needed: Instant::now() }).needed = Instant::now();
             }
             let Some(other) = self.others.get_mut(&i).filter(|o| o.needed.elapsed() < OTHER_KEPT) else {
@@ -498,6 +486,9 @@ impl eframe::App for Overlay {
                     return None;
                 };
                 paint_matheo_as(&painter, at - origin.to_vec2(), MATHEO_H, now, look);
+                if let Some(season) = season {
+                    paint_season(&painter, at - origin.to_vec2(), MATHEO_H, now, look, season);
+                }
                 if let Some(can) = can {
                     paint_can(&painter, can, origin.to_vec2());
                 }
@@ -508,12 +499,13 @@ impl eframe::App for Overlay {
             }
             os::tune_all();
             if needed {
-                // His leaves sway gently.
-                next = next.min(0.1);
+                // His leaves sway gently (what floats around him in season, smoothly).
+                next = next.min(if season.is_some() { 0.04 } else { 0.1 });
             }
         }
         if cfg!(debug_assertions) && std::env::var_os("MATHEO_GALLERY").is_some() {
             paint_matheo_gallery(&painter, self.screen.translate(-origin.to_vec2()), now);
+            paint_season_gallery(&painter, self.screen.translate(-origin.to_vec2()), now);
             busy = true;
         }
         if self.glass > 0 {
@@ -532,6 +524,8 @@ impl eframe::App for Overlay {
         [0.0; 4]
     }
 }
+
+//@SEASON@
 
 //@OS@
 

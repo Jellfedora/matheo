@@ -13,6 +13,7 @@ mod autostart;
 mod glass;
 mod i18n;
 mod overlay;
+mod ronnie;
 mod settings;
 mod update;
 
@@ -45,8 +46,10 @@ pub(crate) fn open(url: &str) {
 }
 
 fn main() {
-    // One Mathéo at a time: a second start just ends (the port held for the process's life).
-    let Ok(_alone) = std::net::TcpListener::bind(("127.0.0.1", 47_391)) else {
+    // One Mathéo at a time: a second start just ends (the port held for the process's life). A debug
+    // build has its own, to be tried beside the installed Mathéo.
+    let port = if cfg!(debug_assertions) { 47_392 } else { 47_391 };
+    let Ok(_alone) = std::net::TcpListener::bind(("127.0.0.1", port)) else {
         return;
     };
     let mut settings = settings::Settings::load();

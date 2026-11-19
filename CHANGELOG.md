@@ -4,6 +4,13 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-19
+
+- **Ses tenues de saison** : bonnet de Père Noël et neige du 1er au 25 décembre, chapeau de fête et confettis au Nouvel an, nœud rouge et cœurs à la Saint-Valentin, oreilles de lapin et œuf de Pâques la semaine de Pâques, chapeau de sorcière et chauve-souris pour Halloween.
+- **Écrans l’un au-dessus de l’autre** : posé sur l’écran du bas, il y reste (il remontait tout seul sur celui du haut).
+- **Plusieurs écrans** : il ne bouge plus du tout quand la souris passe d’un écran à l’autre.
+- **Ronnie en plein écran** : Mathéo reste visible par-dessus. Il se cache toujours devant un film ou un jeu en plein écran.
+
 ## [0.1.2] - 2026-11-19
 
 - **Rechercher une mise à jour**, dans son menu : il regarde tout de suite et dit s’il y a une nouvelle version, s’il est à jour ou s’il n’arrive pas à savoir. Sans rien demander, il regarde maintenant toutes les heures (au lieu de toutes les 6 h).

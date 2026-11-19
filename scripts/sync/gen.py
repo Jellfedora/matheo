@@ -2,7 +2,7 @@
 """Builds src/i18n.rs and src/overlay.rs from Ronnie's Mathéo (its src/app/desktop.rs and src/i18n.rs).
 
 Ronnie's repository next to this one (../bipbip), or its path in RONNIE_DIR. Mathéo's own parts (his
-window, his menu, the update) are in overlay_head.rs, next to this script: change them there, then run
+window, his menu, the update) are in overlay_head.rs, his season outfits in season.rs, next to this script: change them there, then run
 `python3 scripts/sync/gen.py` and check with `cargo test` and `cargo clippy`.
 """
 import re
@@ -232,7 +232,7 @@ for a, b in reps:
 
 tests_from = tests_at
 tests = lines(tests_from, len(desk))
-keep = ["matheo_lands_at_the_foot_of_his_screen", "mathéo_says_water_and_moving_in_turns", "the_can_stands_on_the_free_side_and_comes_back_down", "mathéo_wilts_with_thirst"]
+keep = ["matheo_lands_at_the_foot_of_his_screen", "matheo_lands_on_the_screen_under_him_when_screens_are_stacked", "mathéo_says_water_and_moving_in_turns", "the_can_stands_on_the_free_side_and_comes_back_down", "mathéo_wilts_with_thirst"]
 fns = re.split(r"\n(?=    #\[test\]\n)", tests)
 head, rest = fns[0], fns[1:]
 kept = [f for f in rest if any(f"fn {k}(" in f for k in keep)]
@@ -244,6 +244,7 @@ tests = re.sub(r"\n    use [^\n]*Pointer[^\n]*", "", tests)
 tests = tests.replace("crate::i18n::Lang::ALL", "crate::i18n::Lang::ALL")
 
 overlay = (HERE / "overlay_head.rs").read_text()
+overlay = overlay.replace("//@SEASON@", (HERE / "season.rs").read_text().rstrip())
 overlay = overlay.replace("//@PLANT@", plant).replace("//@BLOCK@", block).replace("//@OS@", oses).replace("//@TESTS@", tests)
 (OUT / "overlay.rs").write_text(overlay)
 print("ok", len(overlay.split(chr(10))), "lines")
