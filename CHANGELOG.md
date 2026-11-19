@@ -4,9 +4,12 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-19
+
 - **Son journal**, dans son menu : ce qui s’est passé à son lancement (système, carte graphique, écrans) et ses fenêtres, pour comprendre un souci sur un ordinateur qu’on ne voit pas.
 - **Linux** : il s’affiche enfin. Il était dessiné avec Vulkan dans une fenêtre restée vide ; il passe par OpenGL. Il a besoin de la bibliothèque `libxkbcommon-x11` (paquet `libxkbcommon-x11-0` sur Debian et Ubuntu) ; sans elle, il s’arrête dès le lancement, et son journal le dit.
 - **Windows** : il ne disparaît plus quand on clique sur lui (sa propre fenêtre passée devant était prise pour un film en plein écran).
+- **Son menu** passe de nouveau par-dessus sa bulle.
 
 ## [0.1.3] - 2026-11-19
 
