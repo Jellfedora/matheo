@@ -2403,7 +2403,7 @@ mod os {
         use std::sync::Mutex;
 
         use windows_sys::Win32::Foundation::HWND;
-        use windows_sys::Win32::Graphics::Dwm::{DWMNCRP_DISABLED, DWMWA_BORDER_COLOR, DWMWA_NCRENDERING_POLICY, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DwmSetWindowAttribute};
+        use windows_sys::Win32::Graphics::Dwm::{DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DwmSetWindowAttribute};
         use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId};
 
         /// No colour for the frame (`DWMWA_COLOR_NONE`).
@@ -2436,7 +2436,10 @@ mod os {
                 // SAFETY: a plain Win32 call, `value` living through it (refused before Windows 11: nothing then).
                 unsafe { DwmSetWindowAttribute(w, attr as u32, (&raw const value).cast(), std::mem::size_of::<u32>() as u32) };
             };
-            set(DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED as u32);
+            // Not DWMNCRP_DISABLED: winit's windows keep WS_CAPTION | WS_BORDER (their frame only
+            // trimmed through WM_NCCALCSIZE), and without DWM drawing the frame, DefWindowProc painted
+            // a classic one over the whole window at each WM_NCACTIVATE (him taking or losing the
+            // focus): a screen-sized frame around nothing.
             set(DWMWA_BORDER_COLOR, COLOR_NONE);
             set(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND as u32);
         }
