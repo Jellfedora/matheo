@@ -4,6 +4,17 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-19
+
+- **Ton prénom** : il te demande comment t’appeler, directement dans sa bulle (clique dans la case, écris, « C’est moi ! » ou « Passer »). Il le retient et le glisse de temps en temps dans ses phrases. Modifiable dans son menu (« Mon prénom… »).
+- **Il se présente** à son premier lancement, puis te demande ton prénom ; après cette mise à jour, il te dit un petit coucou avant de le demander.
+- **Un parachute** : lâché ou lancé de haut, il l’ouvre de temps en temps et descend doucement en se balançant ; au sol, la voile retombe à côté de lui.
+- **Plus vivant quand on le lance** : les yeux ronds en plein vol, écrasé puis rebondissant comme de la gelée à l’atterrissage, un nuage de poussière quand il tombe fort, et il glisse au sol penché en arrière.
+- **Ses heures**, en semaine : la pause à 10 h et à 16 h (« la pause, c’est important »), le repas à midi, et à 18 h, l’heure de rentrer. **Réglables dans son menu** (« Mes horaires… ») au quart d’heure près, ou coupées.
+- **Il prend soin de toi** entre deux conseils, chacun son tour : tes yeux (regarder au loin), ta posture (il se redresse avec toi), une respiration guidée (quatre respirations, il gonfle quand tu inspires et dégonfle quand tu souffles, avec le décompte), et un grand verre d’eau quand il fait chaud l’été.
+- **Selon le moment** : un mot doux le lundi matin, la lampe à allumer les soirs d’hiver, un « tu es sûr ? » si tu travailles le week-end, et il saute de joie quand tu reviens après plus d’une heure d’absence.
+- **Jamais lassant** : chacune de ses phrases a plusieurs versions, tirées au hasard.
+
 ## [0.1.6] - 2026-11-19
 
 - **Plusieurs écrans** : plus aucune fenêtre ne bouge. Chaque écran a la sienne, faite une fois à sa taille et posée en pixels (sous Windows, par Windows lui-même) ; elle montre Mathéo, sa bulle ou son menu quand ils y sont. Avant, une grande fenêtre suivait la souris d’écran en écran : avec des écrans à des échelles différentes (125 % ici, 100 % là), des fenêtres apparaissaient et disparaissaient.
