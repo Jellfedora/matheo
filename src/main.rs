@@ -14,6 +14,8 @@ mod glass;
 mod i18n;
 mod log;
 mod overlay;
+#[cfg(windows)]
+mod place;
 mod ronnie;
 mod settings;
 mod update;

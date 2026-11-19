@@ -93,6 +93,9 @@ fn test_pointer() -> Option<Mouse> {
     Some(Mouse { at: Some(Pos2::new(x, y)), pressed: rest.contains(&"left"), right: rest.contains(&"right") })
 }
 
+/// The title of the window following the pointer (the others: « Mathéo · n », n their screen).
+const MAIN_TITLE: &str = "Mathéo";
+
 /// Frames during which the windows are cleared after a change (Windows applies it a little later).
 const GLASS: u8 = 4;
 
@@ -192,7 +195,7 @@ pub(crate) fn run(settings: Settings) {
 
     let start = os::mouse().at.and_then(os::screen_at).map(|(screen, _)| screen).unwrap_or(Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0)));
     let viewport = egui::ViewportBuilder::default()
-        .with_title("Mathéo")
+        .with_title(MAIN_TITLE)
         .with_decorations(false)
         .with_transparent(true)
         .with_mouse_passthrough(true)
@@ -378,10 +381,16 @@ impl eframe::App for Overlay {
         {
             self.screen = screen;
             self.work = work;
-            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(screen.min));
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(screen.size()));
+            // Windows: in pixels, below (see `crate::place`).
+            if !cfg!(windows) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(screen.min));
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(screen.size()));
+            }
             self.glass = GLASS;
         }
+        // Windows: this window over its screen, in that screen's pixels (checked at each frame).
+        #[cfg(windows)]
+        crate::place::put(MAIN_TITLE, self.screen);
         // Where this window really is: macOS may have slid it under the menu bar (and cut it to fit), so
         // everything is drawn from its true top left, not the screen's.
         let origin = window_origin(&ctx, self.screen.min);
@@ -520,9 +529,11 @@ impl eframe::App for Overlay {
                 next = next.min(0.02);
             }
             let screen = *screen;
+            // Its own title: Windows finds it by it (see `crate::place`).
+            let title = format!("Mathéo · {i}");
             let builder = egui::ViewportBuilder::default()
                 .with_visible(visible)
-                .with_title("Mathéo")
+                .with_title(title.clone())
                 .with_decorations(false)
                 .with_transparent(true)
                 .with_mouse_passthrough(true)
@@ -534,15 +545,10 @@ impl eframe::App for Overlay {
                 .with_position(screen.min)
                 .with_inner_size(screen.size());
             let bubble = ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("matheo-screen", i)), builder, |ctx, _| {
-                // Windows places a new window with the scale of the screen it was made on: put back
-                // over its screen, with that screen's own scale (as the main window is when it moves).
-                if cfg!(windows)
-                    && let Some(r) = ctx.input(|i| i.viewport().outer_rect)
-                    && ((r.min - screen.min).length() > 1.0 || (r.size() - screen.size()).length() > 1.0)
-                {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(screen.min));
-                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(screen.size()));
-                }
+                // Windows places a new window with the scale of the screen it was made on: put over
+                // its screen in that screen's pixels (see `crate::place`).
+                #[cfg(windows)]
+                crate::place::put(&title, screen);
                 if !needed {
                     return None;
                 }
