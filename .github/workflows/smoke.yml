@@ -1,7 +1,8 @@
 # Mathéo on a desktop, Windows and Linux (scripts/smoke/): started, hovered, thrown, his menu opened,
 # a screenshot at each step, his journal kept; all in the run's artifacts (smoke-windows, smoke-linux).
 # One screen, no real graphics card (Windows: WARP; Linux: Xvfb, Mesa's software drivers).
-# Started by hand: gh workflow run smoke.yml [--ref a-branch].
+# Also Windows over three screens at different scales (multi-screen). Started by hand: gh workflow
+# run smoke.yml [--ref a-branch].
 name: Smoke test
 
 on:
@@ -54,4 +55,35 @@ jobs:
         if: always()
         with:
           name: smoke-${{ matrix.name }}
+          path: smoke-out/
+
+  # Windows with three screens at different scales (125 %, 100 %, 100 %), as on our laptops: a
+  # virtual display driver, then Mathéo carried from screen to screen (scripts/smoke/windows-multi.ps1).
+  multi-screen:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+      - name: Build
+        run: cargo build --locked
+
+      - name: Screens
+        shell: pwsh
+        run: ./scripts/smoke/displays.ps1 -Add 2 -Scales 125,100,100
+
+      - name: Smoke test over the screens
+        shell: pwsh
+        run: ./scripts/smoke/windows-multi.ps1
+
+      - name: Journal
+        if: always()
+        shell: bash
+        run: cat smoke-out/matheo.log 2>/dev/null || true
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: smoke-multi-screen
           path: smoke-out/
