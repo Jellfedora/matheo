@@ -12,6 +12,9 @@ public static class Input {
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+    [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+    public struct POINT { public int X; public int Y; }
 }
 "@
 [Input]::SetProcessDPIAware() | Out-Null
@@ -39,6 +42,14 @@ function Foot {
 
 function Move([int]$x, [int]$y) { [Input]::SetCursorPos($x, $y) | Out-Null }
 
+# What the system says of the pointer (to know whether the moves and clicks reach it).
+function Pointer([string]$when) {
+    $p = New-Object Input+POINT
+    [Input]::GetCursorPos([ref]$p) | Out-Null
+    $left = ([Input]::GetAsyncKeyState(1) -band 0x8000) -ne 0
+    Write-Host "$($when): pointer at $($p.X), $($p.Y), left button down: $left"
+}
+
 $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
 Write-Host "screen: $($b.Width) x $($b.Height) at $($b.Left), $($b.Top)"
 Move 200 200
@@ -55,11 +66,13 @@ if ($foot) {
     $x = $foot[0]; $y = $foot[1] - 15
     Move $x $y
     Start-Sleep -Seconds 1
+    Pointer "hover"
     Shot "02-hover"
 
     # Grabbed, thrown up and to the left.
     [Input]::mouse_event(0x2, 0, 0, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 200
+    Pointer "grabbed"
     for ($i = 1; $i -le 12; $i++) {
         Move ($x - $i * 12) ($y - $i * 25)
         Start-Sleep -Milliseconds 25

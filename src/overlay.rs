@@ -1157,7 +1157,18 @@ impl eframe::App for Overlay {
             let real = ctx.input(|i| i.viewport().inner_rect);
             let mut others: Vec<&usize> = self.others.keys().collect();
             others.sort();
-            let state = format!("écrans {:?} ; plein écran {:?} ; fenêtre {:?} (réelle {real:?}) ; Mathéo {:?} ; ses fenêtres {others:?}", os::screens(), self.full.0, self.screen, self.matheo.at.map(|p| (p.x.round(), p.y.round())));
+            let state = format!(
+                "écrans {:?} ; plein écran {:?} ; fenêtre {:?} (réelle {real:?}) ; Mathéo {:?} ; ses fenêtres {others:?} ; souris {:?}{}{} ; attrapé {} ; menu {:?}",
+                os::screens(),
+                self.full.0,
+                self.screen,
+                self.matheo.at.map(|p| (p.x.round(), p.y.round())),
+                mouse.at.map(|p| (p.x.round(), p.y.round())),
+                if mouse.pressed { " gauche" } else { "" },
+                if mouse.right { " droit" } else { "" },
+                self.matheo.grab.is_some(),
+                self.menu.map(|p| (p.x.round(), p.y.round())),
+            );
             if state != self.logged {
                 crate::log::line(&state);
                 self.logged = state;
