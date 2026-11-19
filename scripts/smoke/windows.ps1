@@ -42,7 +42,7 @@ $env:MATHEO_TEST_POINTER = $pointer
 $script:at = @(200, 200)
 $script:buttons = ""
 function Tell { Set-Content -Path $pointer -Value "$($script:at[0]) $($script:at[1]) $($script:buttons)" -NoNewline }
-function Move([int]$x, [int]$y) { $script:at = @($x, $y); Tell }
+function MoveTo([int]$x, [int]$y) { $script:at = @($x, $y); Tell }
 function Down { $script:buttons = "left"; Tell }
 function Up { $script:buttons = ""; Tell }
 function RightClick { $script:buttons = "right"; Tell; Start-Sleep -Milliseconds 150; $script:buttons = ""; Tell }
