@@ -100,6 +100,15 @@ MoveTo 100 100
 Start-Sleep -Seconds 2
 Shot "06-pointer-away"
 
+# Flicker: a burst of screenshots, still then with the pointer moving about (a window showing and
+# hiding would differ from one to the next).
+New-Item -ItemType Directory -Force (Join-Path $out "burst") | Out-Null
+for ($i = 0; $i -lt 40; $i++) {
+    if ($i -ge 20) { MoveTo (100 + ($i - 20) * 40) (200 + ($i % 3) * 150) }
+    Shot ("burst\{0:d2}" -f $i)
+    Start-Sleep -Milliseconds 60
+}
+
 if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
 Start-Sleep -Seconds 1
 if (Test-Path $log) { Copy-Item $log (Join-Path $out "matheo.log") }
