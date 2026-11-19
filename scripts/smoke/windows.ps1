@@ -61,7 +61,7 @@ $foot = Foot
 Write-Host "foot: $foot"
 if ($foot) {
     $x = $foot[0]; $y = $foot[1] - 15
-    Move $x $y
+    MoveTo $x $y
     Start-Sleep -Seconds 1
     Shot "02-hover"
 
@@ -69,7 +69,7 @@ if ($foot) {
     Down
     Start-Sleep -Milliseconds 200
     for ($i = 1; $i -le 12; $i++) {
-        Move ($x - $i * 12) ($y - $i * 25)
+        MoveTo ($x - $i * 12) ($y - $i * 25)
         Start-Sleep -Milliseconds 25
     }
     Up
@@ -82,13 +82,13 @@ if ($foot) {
     $foot = Foot
     Write-Host "foot after the throw: $foot"
     if ($foot) {
-        Move $foot[0] ($foot[1] - 15)
+        MoveTo $foot[0] ($foot[1] - 15)
         Start-Sleep -Milliseconds 500
         RightClick
         Start-Sleep -Seconds 1
         Shot "05-menu"
         # A click elsewhere closes it.
-        Move 300 300
+        MoveTo 300 300
         Start-Sleep -Milliseconds 300
         Down
         Start-Sleep -Milliseconds 150
@@ -96,7 +96,7 @@ if ($foot) {
         Start-Sleep -Seconds 1
     }
 }
-Move 100 100
+MoveTo 100 100
 Start-Sleep -Seconds 2
 Shot "06-pointer-away"
 
