@@ -4,7 +4,7 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
-- **Windows, écrans à des échelles différentes** (125 % ici, 100 % là) : plus de fenêtres qui apparaissent et disparaissent. Ses fenêtres sont posées sur leur écran en pixels, par Windows lui-même, au lieu de faire des allers-retours entre deux échelles.
+- **Plusieurs écrans** : plus aucune fenêtre ne bouge. Chaque écran a la sienne, faite une fois à sa taille et posée en pixels (sous Windows, par Windows lui-même) ; elle montre Mathéo, sa bulle ou son menu quand ils y sont. Avant, une grande fenêtre suivait la souris d’écran en écran : avec des écrans à des échelles différentes (125 % ici, 100 % là), des fenêtres apparaissaient et disparaissaient.
 
 - **Son journal** reste léger : 1 Mo au plus (puis il repart à zéro, l’ancien gardé), et la souris seule n’y écrit plus rien.
 

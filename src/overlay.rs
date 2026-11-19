@@ -1030,7 +1030,10 @@ pub(crate) fn run(settings: Settings) {
         });
     }
 
-    let start = os::mouse().at.and_then(os::screen_at).map(|(screen, _)| screen).unwrap_or(Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0)));
+    // The main screen (the one at the screens' origin), else the first.
+    let start = os::screens().iter().map(|s| s.0).find(|s| s.contains(Pos2::new(1.0, 1.0))).or_else(|| os::screens().first().map(|s| s.0)).unwrap_or(Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0)));
+    // egui's own window: a point, still, on the main screen, drawing nothing. Each screen has a window
+    // of its own, made once at its size and never moved (see `ui`).
     let viewport = egui::ViewportBuilder::default()
         .with_title(MAIN_TITLE)
         .with_decorations(false)
@@ -1042,7 +1045,7 @@ pub(crate) fn run(settings: Settings) {
         .with_has_shadow(false)
         .with_resizable(false)
         .with_position(start.min)
-        .with_inner_size(start.size());
+        .with_inner_size([1.0, 1.0]);
     let mut options = eframe::NativeOptions { viewport, persist_window: false, ..Default::default() };
     // Out of the Dock and of ⌘ Tab.
     #[cfg(target_os = "macos")]
@@ -1206,37 +1209,18 @@ impl eframe::App for Overlay {
             clear_glass();
         }
         let covered = |full: &[Rect], screen: Rect| full.iter().any(|f| (f.min - screen.min).length() < 1.0 && (f.max - screen.max).length() < 1.0);
-        if covered(&self.full.0, self.screen) {
-            ctx.request_repaint_after(Duration::from_secs(1));
-            return;
-        }
-        // The pointer went to another screen: the window follows it (not while his menu shows).
-        if let Some(at) = mouse.at
-            && self.menu.is_none()
-            && !self.screen.contains(at)
-            && let Some((screen, work)) = os::screen_at(at)
-        {
-            self.screen = screen;
-            self.work = work;
-            // Windows: in pixels, below (see `crate::place`).
-            if !cfg!(windows) {
-                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(screen.min));
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(screen.size()));
-            }
-            self.glass = GLASS;
-        }
-        // Windows: this window over its screen, in that screen's pixels (checked at each frame).
-        #[cfg(windows)]
-        crate::place::put(MAIN_TITLE, self.screen);
-        // Where this window really is: macOS may have slid it under the menu bar (and cut it to fit), so
-        // everything is drawn from its true top left, not the screen's.
-        let origin = window_origin(&ctx, self.screen.min);
         let pressed = mouse.pressed && !self.pressed;
         self.pressed = mouse.pressed;
         let right_click = mouse.right && !self.right;
         self.right = mouse.right;
-        let screens = os::screens();
-        let works: Vec<Rect> = if screens.is_empty() { vec![self.work] } else { screens.iter().map(|s| s.1).collect() };
+        let screens = {
+            let all = os::screens();
+            if all.is_empty() { vec![(self.screen, self.work)] } else { all }
+        };
+        let works: Vec<Rect> = screens.iter().map(|s| s.1).collect();
+        // The screen of a point (his menu's), else the main one.
+        let main = self.screen;
+        let screen_of = |p: Pos2| screens.iter().map(|s| s.0).find(|s| s.contains(p)).unwrap_or(main);
         let dock = os::dock();
         let grounds = matheo_grounds(&screens, &works, dock);
         // A newer version: said once, a click on his bubble installs it. Installed, he says so and
@@ -1283,7 +1267,7 @@ impl eframe::App for Overlay {
         // His menu: a click on a row does it, a click anywhere else closes it.
         let quiet = self.matheo.quiet.is_some_and(|until| unix_now() < until);
         let rows = menu_rows(&self.settings, quiet);
-        let menu = self.menu.map(|at| menu_rect(at, rows.len(), self.screen));
+        let menu = self.menu.map(|at| menu_rect(at, rows.len(), screen_of(at)));
         let on_menu = menu.zip(mouse.at).is_some_and(|(r, p)| r.contains(p));
         let hover = menu.zip(mouse.at).filter(|(r, p)| r.contains(*p)).map(|(r, p)| (((p.y - r.min.y - 6.0) / ROW_H).floor().max(0.0) as usize).min(rows.len() - 1));
         let mut click = pressed;
@@ -1297,6 +1281,7 @@ impl eframe::App for Overlay {
             }
         }
         let mut open_menu = None;
+        let catching;
         // Mathéo: grabbed with the mouse (the window takes the click over him only), dragged, dropped:
         // he falls back to the foot of the screen under him.
         let mut plant_busy = false;
@@ -1494,10 +1479,11 @@ impl eframe::App for Overlay {
                 Some(_) => plant_busy = true,
                 None => {}
             }
-            let pass = !(over || plant.grab.is_some() || on_menu);
-            if pass != plant.pass {
-                plant.pass = pass;
-                ctx.send_viewport_cmd(egui::ViewportCommand::MousePassthrough(pass));
+            // Over him (or his bubble, his can, his menu), or holding him: the window under the
+            // pointer catches the clicks (below); else they go through.
+            catching = over || plant.grab.is_some() || on_menu;
+            if catching != !plant.pass {
+                plant.pass = !catching;
                 self.glass = GLASS;
             }
         }
@@ -1516,52 +1502,43 @@ impl eframe::App for Overlay {
         let season = self.season;
         let tip = m.tip.map(|(said, _)| said.text(self.settings.lang));
 
-        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("matheo")));
         let mut busy = plant_busy;
         let mut next: f32 = 1.0;
-        let here = screens.iter().position(|(s, _)| (s.min - self.screen.min).length() < 1.0).unwrap_or(0);
-        // Mathéo on the screen he's on.
-        let plant_on = plant.map(|(at, _)| screens.iter().position(|(s, _)| s.contains(at - Vec2::new(0.0, 1.0))).unwrap_or(here));
-        // His menu: in his window when it opens on his screen (above his bubble, his window being
-        // above this one), else in this one.
-        let menu = self.menu.map(|at| menu_rect(at, rows.len(), self.screen));
-        let menu_on = menu.and_then(|m| screens.iter().position(|(s, _)| s.contains(m.center())));
-        let menu_his = menu_on.is_some() && menu_on == plant_on;
-        if let Some(menu) = menu {
-            if !menu_his {
-                paint_menu(&painter, menu.translate(-origin.to_vec2()), &rows, hover);
-            }
+        let home = screens.iter().position(|(s, _)| (s.min - self.screen.min).length() < 1.0).unwrap_or(0);
+        let on = |p: Pos2| screens.iter().position(|(s, _)| s.contains(p));
+        // Mathéo on the screen he's on, his menu on its own, the pointer on its own.
+        let plant_on = plant.map(|(at, _)| on(at - Vec2::new(0.0, 1.0)).unwrap_or(home));
+        let menu = self.menu.map(|at| menu_rect(at, rows.len(), screen_of(at)));
+        let menu_on = menu.and_then(|m| on(m.center()));
+        let pointer_on = mouse.at.and_then(on);
+        let gallery = cfg!(debug_assertions) && std::env::var_os("MATHEO_GALLERY").is_some();
+        if menu.is_some() || gallery {
             busy = true;
         }
-        // Mathéo is drawn by a window of his own over his screen, never by this one: this one follows
-        // the pointer from screen to screen (for his menu), he stays still meanwhile (drawn by the
-        // window going away, then by the one arriving, he jumped a little at each change). His window
-        // is made hidden, shown once drawn (else, on Windows, a white square first), hidden again
-        // when he's no longer on its screen, closed a while after.
+        // A window over each screen, made once at its size and never moved, drawing what is on its
+        // screen: Mathéo (his bubble, his can), his menu. (A window following the pointer from screen
+        // to screen, at different scales, flashed, jumped, went to and fro on Windows.) Made hidden,
+        // shown once drawn (else, on Windows, a white square first), then always there; none over a
+        // screen another app fills (a film).
         for (i, (screen, _)) in screens.iter().enumerate() {
-            let needed = plant_on == Some(i);
             if covered(&self.full.0, *screen) {
                 self.others.remove(&i);
                 continue;
             }
-            if needed {
-                self.others.entry(i).or_insert(Other { frames: 0, needed: Instant::now() }).needed = Instant::now();
-            }
-            let Some(other) = self.others.get_mut(&i).filter(|o| o.needed.elapsed() < OTHER_KEPT) else {
-                self.others.remove(&i);
-                continue;
-            };
-            let visible = needed && other.frames >= 2;
+            let other = self.others.entry(i).or_insert(Other { frames: 0, needed: Instant::now() });
+            other.needed = Instant::now();
+            let visible = other.frames >= 2;
             if other.frames < 2 + u32::from(GLASS) {
-                // Just made or shown: cleared too.
+                // Just made or shown: cleared too, drawn again at once to be shown.
                 self.glass = self.glass.max(1);
-            }
-            other.frames = other.frames.saturating_add(1);
-            if needed && !visible {
-                // Drawn again at once, to be shown.
                 next = next.min(0.02);
             }
+            other.frames = other.frames.saturating_add(1);
             let screen = *screen;
+            let his = plant_on == Some(i);
+            let menu_here = menu.filter(|_| menu_on == Some(i));
+            // The clicks caught by this window only when the pointer is on its screen over him.
+            let pass = !(catching && pointer_on == Some(i));
             // Its own title: Windows finds it by it (see `crate::place`).
             let title = format!("Mathéo · {i}");
             let builder = egui::ViewportBuilder::default()
@@ -1569,7 +1546,7 @@ impl eframe::App for Overlay {
                 .with_title(title.clone())
                 .with_decorations(false)
                 .with_transparent(true)
-                .with_mouse_passthrough(true)
+                .with_mouse_passthrough(pass)
                 .with_window_level(egui::WindowLevel::AlwaysOnTop)
                 .with_taskbar(false)
                 .with_active(false)
@@ -1582,42 +1559,41 @@ impl eframe::App for Overlay {
                 // its screen in that screen's pixels (see `crate::place`).
                 #[cfg(windows)]
                 crate::place::put(&title, screen);
-                if !needed {
-                    return None;
-                }
                 // Drawn from where the window really is (macOS slides a new one under the menu bar).
                 let origin = window_origin(ctx, screen.min);
                 let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("matheo")));
-                let (Some((at, look)), true) = (plant, plant_on == Some(i)) else {
-                    return None;
-                };
-                paint_matheo_as(&painter, at - origin.to_vec2(), MATHEO_H, now, look);
-                if let Some(season) = season {
-                    paint_season(&painter, at - origin.to_vec2(), MATHEO_H, now, look, season);
+                let mut bubble = None;
+                if let (Some((at, look)), true) = (plant, his) {
+                    paint_matheo_as(&painter, at - origin.to_vec2(), MATHEO_H, now, look);
+                    if let Some(season) = season {
+                        paint_season(&painter, at - origin.to_vec2(), MATHEO_H, now, look, season);
+                    }
+                    if let Some(can) = can {
+                        paint_can(&painter, can, origin.to_vec2());
+                    }
+                    bubble = tip.map(|text| paint_matheo_tip(&painter, at - origin.to_vec2(), text, screen.translate(-origin.to_vec2())).translate(origin.to_vec2()));
                 }
-                if let Some(can) = can {
-                    paint_can(&painter, can, origin.to_vec2());
-                }
-                let bubble = tip.map(|text| paint_matheo_tip(&painter, at - origin.to_vec2(), text, screen.translate(-origin.to_vec2())).translate(origin.to_vec2()));
-                if let Some(menu) = menu.filter(|_| menu_his) {
+                // His menu above his bubble.
+                if let Some(menu) = menu_here {
                     paint_menu(&painter, menu.translate(-origin.to_vec2()), &rows, hover);
+                }
+                if gallery && i == home {
+                    paint_matheo_gallery(&painter, screen.translate(-origin.to_vec2()), now);
+                    paint_season_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                 }
                 bubble
             });
             if bubble.is_some() {
                 self.matheo.bubble = bubble;
             }
-            os::tune_all();
-            if needed {
+            if his {
                 // His leaves sway gently (what floats around him in season, smoothly).
                 next = next.min(if season.is_some() { 0.04 } else { 0.1 });
             }
         }
-        if cfg!(debug_assertions) && std::env::var_os("MATHEO_GALLERY").is_some() {
-            paint_matheo_gallery(&painter, self.screen.translate(-origin.to_vec2()), now);
-            paint_season_gallery(&painter, self.screen.translate(-origin.to_vec2()), now);
-            busy = true;
-        }
+        // Screens gone: their windows with them.
+        self.others.retain(|i, _| *i < screens.len());
+        os::tune_all();
         if self.glass > 0 {
             self.glass -= 1;
             clear_glass();
