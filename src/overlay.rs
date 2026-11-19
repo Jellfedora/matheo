@@ -916,6 +916,20 @@ enum Choice {
     Quit,
 }
 
+/// Debug builds, for the smoke test (scripts/smoke/): the pointer read from the file
+/// `MATHEO_TEST_POINTER` names (`x y`, then `left` and/or `right` while pressed), where the runner's
+/// own pointer can't be moved.
+fn test_pointer() -> Option<Mouse> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    let text = std::fs::read_to_string(std::env::var_os("MATHEO_TEST_POINTER")?).ok()?;
+    let mut words = text.split_whitespace();
+    let (x, y) = (words.next()?.parse().ok()?, words.next()?.parse().ok()?);
+    let rest: Vec<&str> = words.collect();
+    Some(Mouse { at: Some(Pos2::new(x, y)), pressed: rest.contains(&"left"), right: rest.contains(&"right") })
+}
+
 /// Frames during which the windows are cleared after a change (Windows applies it a little later).
 const GLASS: u8 = 4;
 
@@ -1004,7 +1018,7 @@ pub(crate) fn run(settings: Settings) {
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(Duration::from_millis(16));
-                let now = os::mouse();
+                let now = test_pointer().unwrap_or_else(os::mouse);
                 let changed = mouse.lock().map(|mut m| std::mem::replace(&mut *m, now) != now).unwrap_or(false);
                 if changed && let Some(ctx) = ctx_slot.lock().ok().and_then(|c| c.clone()) {
                     ctx.request_repaint();
@@ -1026,7 +1040,6 @@ pub(crate) fn run(settings: Settings) {
         .with_resizable(false)
         .with_position(start.min)
         .with_inner_size(start.size());
-    #[cfg_attr(not(any(windows, target_os = "macos")), allow(unused_mut))]
     let mut options = eframe::NativeOptions { viewport, persist_window: false, ..Default::default() };
     // Out of the Dock and of ⌘ Tab.
     #[cfg(target_os = "macos")]
@@ -1042,6 +1055,14 @@ pub(crate) fn run(settings: Settings) {
         let mut setup = eframe::egui_wgpu::WgpuSetupCreateNew::without_display_handle();
         setup.instance_descriptor.backends = eframe::wgpu::Backends::DX12;
         setup.instance_descriptor.backend_options.dx12.presentation_system = eframe::wgpu::Dx12SwapchainKind::DxgiFromVisual;
+        options.wgpu_options.wgpu_setup = setup.into();
+    }
+    // Linux: OpenGL. Through Vulkan, the window shows but nothing drawn in it does (seen with Mesa
+    // on X11, the compositor getting no alpha). WGPU_BACKEND still picks another one.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if std::env::var_os("WGPU_BACKEND").is_none() {
+        let mut setup = eframe::egui_wgpu::WgpuSetupCreateNew::without_display_handle();
+        setup.instance_descriptor.backends = eframe::wgpu::Backends::GL;
         options.wgpu_options.wgpu_setup = setup.into();
     }
     let first = !matheo_file().is_some_and(|f| f.exists());

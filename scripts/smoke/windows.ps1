@@ -10,11 +10,6 @@ using System;
 using System.Runtime.InteropServices;
 public static class Input {
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
-    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
-    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
-    [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int key);
-    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
-    public struct POINT { public int X; public int Y; }
 }
 "@
 [Input]::SetProcessDPIAware() | Out-Null
@@ -40,26 +35,21 @@ function Foot {
     return @([int][double]$m.Matches[0].Groups[1].Value, [int][double]$m.Matches[0].Groups[2].Value)
 }
 
-# The pointer moved as a mouse would (SetCursorPos doesn't move it on the runner): absolute, in
-# 0..65535 over the primary screen.
-function Move([int]$x, [int]$y) {
-    $s = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-    $nx = [uint32][math]::Round($x * 65535 / ($s.Width - 1))
-    $ny = [uint32][math]::Round($y * 65535 / ($s.Height - 1))
-    [Input]::mouse_event(0x8001, $nx, $ny, 0, [UIntPtr]::Zero)
-}
-
-# What the system says of the pointer (to know whether the moves and clicks reach it).
-function Pointer([string]$when) {
-    $p = New-Object Input+POINT
-    [Input]::GetCursorPos([ref]$p) | Out-Null
-    $left = ([Input]::GetAsyncKeyState(1) -band 0x8000) -ne 0
-    Write-Host "$($when): pointer at $($p.X), $($p.Y), left button down: $left"
-}
+# The runner's pointer can't be moved (no mouse in its session): Mathéo, a debug build, reads it
+# from this file instead (MATHEO_TEST_POINTER, see test_pointer in scripts/sync/overlay_head.rs).
+$pointer = Join-Path (Get-Location) "smoke-pointer.txt"
+$env:MATHEO_TEST_POINTER = $pointer
+$script:at = @(200, 200)
+$script:buttons = ""
+function Tell { Set-Content -Path $pointer -Value "$($script:at[0]) $($script:at[1]) $($script:buttons)" -NoNewline }
+function Move([int]$x, [int]$y) { $script:at = @($x, $y); Tell }
+function Down { $script:buttons = "left"; Tell }
+function Up { $script:buttons = ""; Tell }
+function RightClick { $script:buttons = "right"; Tell; Start-Sleep -Milliseconds 150; $script:buttons = ""; Tell }
 
 $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
 Write-Host "screen: $($b.Width) x $($b.Height) at $($b.Left), $($b.Top)"
-Move 200 200
+Tell
 Shot "00-desktop"
 
 $p = Start-Process -FilePath $Exe -PassThru
@@ -73,18 +63,16 @@ if ($foot) {
     $x = $foot[0]; $y = $foot[1] - 15
     Move $x $y
     Start-Sleep -Seconds 1
-    Pointer "hover"
     Shot "02-hover"
 
     # Grabbed, thrown up and to the left.
-    [Input]::mouse_event(0x2, 0, 0, 0, [UIntPtr]::Zero)
+    Down
     Start-Sleep -Milliseconds 200
-    Pointer "grabbed"
     for ($i = 1; $i -le 12; $i++) {
         Move ($x - $i * 12) ($y - $i * 25)
         Start-Sleep -Milliseconds 25
     }
-    [Input]::mouse_event(0x4, 0, 0, 0, [UIntPtr]::Zero)
+    Up
     Start-Sleep -Milliseconds 250
     Shot "03-thrown"
     Start-Sleep -Seconds 5
@@ -96,16 +84,15 @@ if ($foot) {
     if ($foot) {
         Move $foot[0] ($foot[1] - 15)
         Start-Sleep -Milliseconds 500
-        [Input]::mouse_event(0x8, 0, 0, 0, [UIntPtr]::Zero)
-        Start-Sleep -Milliseconds 100
-        [Input]::mouse_event(0x10, 0, 0, 0, [UIntPtr]::Zero)
+        RightClick
         Start-Sleep -Seconds 1
         Shot "05-menu"
         # A click elsewhere closes it.
         Move 300 300
         Start-Sleep -Milliseconds 300
-        [Input]::mouse_event(0x2, 0, 0, 0, [UIntPtr]::Zero)
-        [Input]::mouse_event(0x4, 0, 0, 0, [UIntPtr]::Zero)
+        Down
+        Start-Sleep -Milliseconds 150
+        Up
         Start-Sleep -Seconds 1
     }
 }
