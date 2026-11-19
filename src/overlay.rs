@@ -1511,8 +1511,15 @@ impl eframe::App for Overlay {
         let here = screens.iter().position(|(s, _)| (s.min - self.screen.min).length() < 1.0).unwrap_or(0);
         // Mathéo on the screen he's on.
         let plant_on = plant.map(|(at, _)| screens.iter().position(|(s, _)| s.contains(at - Vec2::new(0.0, 1.0))).unwrap_or(here));
-        if let Some(menu) = self.menu.map(|at| menu_rect(at, rows.len(), self.screen)) {
-            paint_menu(&painter, menu.translate(-origin.to_vec2()), &rows, hover);
+        // His menu: in his window when it opens on his screen (above his bubble, his window being
+        // above this one), else in this one.
+        let menu = self.menu.map(|at| menu_rect(at, rows.len(), self.screen));
+        let menu_on = menu.and_then(|m| screens.iter().position(|(s, _)| s.contains(m.center())));
+        let menu_his = menu_on.is_some() && menu_on == plant_on;
+        if let Some(menu) = menu {
+            if !menu_his {
+                paint_menu(&painter, menu.translate(-origin.to_vec2()), &rows, hover);
+            }
             busy = true;
         }
         // Mathéo is drawn by a window of his own over his screen, never by this one: this one follows
@@ -1583,7 +1590,11 @@ impl eframe::App for Overlay {
                 if let Some(can) = can {
                     paint_can(&painter, can, origin.to_vec2());
                 }
-                tip.map(|text| paint_matheo_tip(&painter, at - origin.to_vec2(), text, screen.translate(-origin.to_vec2())).translate(origin.to_vec2()))
+                let bubble = tip.map(|text| paint_matheo_tip(&painter, at - origin.to_vec2(), text, screen.translate(-origin.to_vec2())).translate(origin.to_vec2()));
+                if let Some(menu) = menu.filter(|_| menu_his) {
+                    paint_menu(&painter, menu.translate(-origin.to_vec2()), &rows, hover);
+                }
+                bubble
             });
             if bubble.is_some() {
                 self.matheo.bubble = bubble;

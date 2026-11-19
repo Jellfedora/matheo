@@ -72,10 +72,15 @@ if read -r x y < <(foot); then
 		echo "foot after the throw: $x $y"
 		xdotool mousemove "$x" $((y - 15))
 		sleep 0.5
-		xdotool click 3
+		# Held a little: he reads the buttons 60 times a second.
+		xdotool mousedown 3
+		sleep 0.15
+		xdotool mouseup 3
 		sleep 1
 		shot 05-menu
-		xdotool mousemove 300 300 click 1
+		xdotool mousemove 300 300 mousedown 1
+		sleep 0.15
+		xdotool mouseup 1
 		sleep 1
 	fi
 else
