@@ -1,25 +1,35 @@
 //! Mathéo's journal: `matheo.log` beside his settings, what happened at start (the system, the
 //! graphics card, the screens, an error) and his windows' changes, to know why he doesn't show on a
-//! computer we can't see. Started again at each start (the previous kept as `matheo.old.log`).
+//! computer we can't see. Started again at each start and past 1 MB (the previous kept as
+//! `matheo.old.log`): 2 MB at most.
 
 use std::io::Write;
 use std::sync::Mutex;
 
-static FILE: Mutex<Option<std::fs::File>> = Mutex::new(None);
+/// The journal open, and what was written in it.
+static FILE: Mutex<Option<(std::fs::File, u64)>> = Mutex::new(None);
+
+/// Past this, started again.
+const MAX: u64 = 1024 * 1024;
 
 /// The journal's path.
 pub(crate) fn path() -> Option<std::path::PathBuf> {
     crate::config_dir().map(|d| d.join("matheo.log"))
 }
 
+/// A new journal, the previous one kept as `matheo.old.log`.
+fn renew() -> Option<std::fs::File> {
+    let path = path()?;
+    let _ = std::fs::rename(&path, path.with_file_name("matheo.old.log"));
+    std::fs::File::create(&path).ok()
+}
+
 /// A new journal, the previous one kept; a panic written in it too.
 pub(crate) fn start() {
-    let Some(path) = path() else { return };
-    let _ = std::fs::rename(&path, path.with_file_name("matheo.old.log"));
-    if let Ok(file) = std::fs::File::create(&path)
+    if let Some(file) = renew()
         && let Ok(mut f) = FILE.lock()
     {
-        *f = Some(file);
+        *f = Some((file, 0));
     }
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -39,9 +49,13 @@ fn system() -> String {
 pub(crate) fn line(text: &str) {
     let text = format!("{} {text}", chrono::Local::now().format("%H:%M:%S%.3f"));
     eprintln!("{text}");
-    if let Ok(mut f) = FILE.lock()
-        && let Some(file) = f.as_mut()
+    let Ok(mut f) = FILE.lock() else { return };
+    if f.as_ref().is_some_and(|(_, written)| *written > MAX) {
+        *f = renew().map(|file| (file, 0));
+    }
+    if let Some((file, written)) = f.as_mut()
+        && writeln!(file, "{text}").is_ok()
     {
-        let _ = writeln!(file, "{text}");
+        *written += text.len() as u64 + 1;
     }
 }

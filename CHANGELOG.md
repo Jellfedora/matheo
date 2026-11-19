@@ -4,6 +4,8 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+- **Son journal** reste léger : 1 Mo au plus (puis il repart à zéro, l’ancien gardé), et la souris seule n’y écrit plus rien.
+
 ## [0.1.5] - 2026-11-19
 
 - **Linux, écran mis à l’échelle** (125 %, 150 %… comme sur Deepin) : il s’affiche ; sa fenêtre était plus petite que l’écran et il se tenait en dehors.

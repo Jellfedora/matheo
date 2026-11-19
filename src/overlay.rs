@@ -1190,9 +1190,11 @@ impl eframe::App for Overlay {
                 self.matheo.grab.is_some(),
                 self.menu.map(|p| (p.x.round(), p.y.round())),
             );
-            if state != self.logged {
+            // Said when something but the pointer changed (else a line each second it moves).
+            let key = state.split(" ; souris ").next().unwrap_or_default().to_owned() + &format!("{} {}", self.matheo.grab.is_some(), self.menu.is_some());
+            if key != self.logged {
                 crate::log::line(&state);
-                self.logged = state;
+                self.logged = key;
             }
             // Linux: the window manager told about our windows once it lists them (Windows: their
             // frame taken off again, should one have slipped through).
