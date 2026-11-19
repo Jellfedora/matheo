@@ -103,6 +103,22 @@ kill "$pid" 2>/dev/null
 sleep 1
 [ -n "$log" ] && cp "$log" "$out/matheo-gallery.log"
 
+# A screen at 125 % (Xft.dpi 120, as on Deepin): started, then the pointer moved over him.
+echo 'Xft.dpi: 120' | xrdb -merge
+"$exe" >"$out/stderr-125.log" 2>&1 &
+pid=$!
+sleep 8
+xdotool mousemove 800 800
+sleep 1
+xdotool mousemove 1400 880
+sleep 2
+shot 09-scale-125
+kill -0 "$pid" 2>/dev/null || echo "Mathéo exited at 125 %"
+kill "$pid" 2>/dev/null
+sleep 1
+[ -n "$log" ] && cp "$log" "$out/matheo-125.log"
+echo 'Xft.dpi: 96' | xrdb -merge
+
 # The same through OpenGL instead of Vulkan.
 WGPU_BACKEND=gl MATHEO_GALLERY=1 "$exe" >"$out/stderr-gl.log" 2>&1 &
 pid=$!
