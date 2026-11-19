@@ -12,6 +12,7 @@ mod autostart;
 #[cfg(windows)]
 mod glass;
 mod i18n;
+mod log;
 mod overlay;
 mod ronnie;
 mod settings;
@@ -50,8 +51,11 @@ fn main() {
     // build has its own, to be tried beside the installed Mathéo.
     let port = if cfg!(debug_assertions) { 47_392 } else { 47_391 };
     let Ok(_alone) = std::net::TcpListener::bind(("127.0.0.1", port)) else {
+        // Not a word in the journal: it's the running Mathéo's.
+        eprintln!("Mathéo tourne déjà (port {port})");
         return;
     };
+    log::start();
     let mut settings = settings::Settings::load();
     // The first time: he starts with the computer (switched off from his menu; not a debug build).
     if settings.first {

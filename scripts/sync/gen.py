@@ -72,6 +72,7 @@ MENU = {
                     "Hi! I’m Mathéo. To stand on the Dock, allow me in Accessibility (macOS’ window). Else I stay just above it. Right-click me for my menu."),
     "menu_install": ("Installer la version {v}", "Install version {v}"),
     "menu_check": ("Rechercher une mise à jour", "Check for updates"),
+    "menu_journal": ("Son journal (en cas de souci)", "His log (if something's wrong)"),
     "matheo_checking": ("Je regarde s’il y a une nouvelle version de moi…", "Looking for a new version of me…"),
     "matheo_latest": ("Je suis à jour, c’est ma dernière version.", "I’m up to date, this is my latest version."),
     "matheo_unreachable": ("Je n’arrive pas à savoir s’il y a une nouvelle version. Réessaie plus tard.", "I can’t find out whether there’s a new version. Try again later."),

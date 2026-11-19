@@ -4,6 +4,9 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+- **Son journal**, dans son menu : ce qui s’est passé à son lancement (système, carte graphique, écrans) et ses fenêtres, pour comprendre un souci sur un ordinateur qu’on ne voit pas.
+- **Windows** : il ne disparaît plus quand on clique sur lui (sa propre fenêtre passée devant était prise pour un film en plein écran).
+
 ## [0.1.3] - 2026-11-19
 
 - **Ses tenues de saison** : bonnet de Père Noël et neige du 1er au 25 décembre, chapeau de fête et confettis au Nouvel an, nœud rouge et cœurs à la Saint-Valentin, oreilles de lapin et œuf de Pâques la semaine de Pâques, chapeau de sorcière et chauve-souris pour Halloween.

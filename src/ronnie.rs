@@ -1,5 +1,7 @@
-//! Ronnie in front: Mathéo stays over it, even full screen (he only steps aside for a film, a game).
-//! In Ronnie, his own Mathéo is Ronnie's child and never hides from it; here, Ronnie is another app.
+//! Ronnie (or Mathéo himself) in front: Mathéo stays over it, even full screen (he only steps aside
+//! for a film, a game). In Ronnie, his own Mathéo is Ronnie's child and never hides from it; here,
+//! Ronnie is another app. On Windows, a click on Mathéo brings his window (as big as the screen) in
+//! front: taken for a film, it hid him.
 
 /// The app in front is Ronnie.
 #[cfg(target_os = "macos")]
@@ -10,7 +12,7 @@ pub(crate) fn in_front() -> bool {
         .is_some_and(|id| id.to_string() == "com.jellfedora.ronnie")
 }
 
-/// The window in front is Ronnie's (ronnie.exe).
+/// The window in front is Ronnie's (ronnie.exe) or Mathéo's own.
 #[cfg(windows)]
 pub(crate) fn in_front() -> bool {
     use windows_sys::Win32::Foundation::CloseHandle;
@@ -24,6 +26,9 @@ pub(crate) fn in_front() -> bool {
         }
         let mut pid = 0u32;
         GetWindowThreadProcessId(front, &mut pid);
+        if pid == std::process::id() {
+            return true;
+        }
         let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if process.is_null() {
             return false;

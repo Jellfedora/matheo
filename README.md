@@ -39,6 +39,8 @@ l’appli et la relance.
 - `cargo run` : le lance, à côté du Mathéo installé (un build de debug a son port, 47392, et ses réglages, `Matheo-dev`).
 - `MATHEO_GALLERY=1 cargo run` : tous ses états et ses tenues côte à côte ; `MATHEO_CLOCK=late|friday` force l’heure, `MATHEO_SEASON=christmas|newyear|valentine|easter|halloween` la tenue (builds de debug seulement).
 - `cargo test`, `cargo clippy`.
+- Le test sur un bureau Windows et Linux : `gh workflow run smoke.yml` (`scripts/smoke/`) ; il démarre Mathéo, le survole, le lance, ouvre son menu, et garde des captures et son journal dans les artefacts du run (un seul écran, pas de vraie carte graphique).
+- Son journal : `matheo.log` dans le dossier de config (aussi dans son menu, « Son journal »), refait à chaque lancement.
 - L’icône : `scripts/make-icon.py` (Pillow) écrit `assets/icon.png`, `Matheo.icns`, `matheo.ico`.
 - Le code de Mathéo vient de Ronnie (`src/app/desktop.rs`, `src/i18n.rs`) : `python3 scripts/sync/gen.py` regénère `src/overlay.rs` et `src/i18n.rs` depuis `../bipbip` (ou `RONNIE_DIR`). Ce qui est propre à l’appli (fenêtre, menu, mise à jour) se change dans `scripts/sync/overlay_head.rs`, ses tenues dans `scripts/sync/season.rs`, pas dans `src/overlay.rs`.
 

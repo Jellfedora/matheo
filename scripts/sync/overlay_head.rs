@@ -51,6 +51,8 @@ struct Overlay {
     others: std::collections::HashMap<usize, Other>,
     /// The season's outfit he wears (Christmas, Halloween...), looked at each minute.
     season: Option<Season>,
+    /// What the journal last said of the windows (said again when it changes).
+    logged: String,
     /// Windows: frames left to clear what stays behind the drawing (see `glass`), after a change
     /// that may have made it white.
     glass: u8,
@@ -71,6 +73,8 @@ enum Choice {
     Install,
     /// Look for a newer version now.
     Check,
+    /// His journal opened (to tell what went wrong).
+    Journal,
     Dock,
     Quit,
 }
@@ -106,6 +110,7 @@ fn menu_rows(settings: &Settings, quiet: bool) -> Vec<(String, Option<bool>, Cho
         _ => rows.push((t.menu_check.to_owned(), None, Choice::Check)),
     }
     rows.push((t.menu_page.to_owned(), None, Choice::Page));
+    rows.push((t.menu_journal.to_owned(), None, Choice::Journal));
     rows.push((t.menu_quit.to_owned(), None, Choice::Quit));
     rows
 }
@@ -151,7 +156,7 @@ pub(crate) fn run(settings: Settings) {
     // Without a compositor, the transparent window would hide the screen in black: nothing then.
     #[cfg(all(unix, not(target_os = "macos")))]
     if !os::composited() {
-        eprintln!("Mathéo : pas de compositeur, rien à afficher");
+        crate::log::line("pas de compositeur (ou pas de serveur X : DISPLAY ?), rien à afficher");
         return;
     }
     let mouse = Arc::new(Mutex::new(Mouse::default()));
@@ -203,10 +208,15 @@ pub(crate) fn run(settings: Settings) {
         options.wgpu_options.wgpu_setup = setup.into();
     }
     let first = !matheo_file().is_some_and(|f| f.exists());
+    crate::log::line(&format!("écrans {:?}, souris {:?}, fenêtre sur {start:?}", os::screens(), os::mouse().at));
     let result = eframe::run_native(
         "matheo",
         options,
         Box::new(move |cc| {
+            if let Some(render) = &cc.wgpu_render_state {
+                let info = render.adapter.get_info();
+                crate::log::line(&format!("carte graphique : {} ({:?}, {:?}, pilote {} {})", info.name, info.backend, info.device_type, info.driver, info.driver_info));
+            }
             os::tune(cc);
             if let Ok(mut slot) = ctx_slot.lock() {
                 *slot = Some(cc.egui_ctx.clone());
@@ -223,11 +233,12 @@ pub(crate) fn run(settings: Settings) {
                     crate::access::ask();
                 }
             }
-            Ok(Box::new(Overlay { mouse, settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), glass: GLASS }))
+            Ok(Box::new(Overlay { mouse, settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), logged: String::new(), glass: GLASS }))
         }),
     );
-    if let Err(e) = result {
-        eprintln!("Mathéo : {e}");
+    match result {
+        Err(e) => crate::log::line(&format!("arrêté sur une erreur : {e}")),
+        Ok(()) => crate::log::line("fenêtre fermée"),
     }
 }
 
@@ -262,6 +273,11 @@ impl Overlay {
             Choice::Lang => self.settings.lang = self.settings.lang.other(),
             Choice::Version => {}
             Choice::Page => crate::open(crate::PAGE),
+            Choice::Journal => {
+                if let Some(path) = crate::log::path() {
+                    crate::open(&path.to_string_lossy());
+                }
+            }
             Choice::Install => {
                 crate::update::install();
                 self.matheo.tip = Some((Said::Installing, Instant::now()));
@@ -299,6 +315,16 @@ impl eframe::App for Overlay {
             // Not for Ronnie (full screen too): he stays over it.
             let ronnie = crate::ronnie::in_front();
             self.full = (screens.into_iter().filter(|s| !ronnie && os::full_screen(*s)).collect(), Some(Instant::now()));
+            // The journal: the screens, those hidden from (full screen), this window, where he stands,
+            // his windows; when it changes.
+            let real = ctx.input(|i| i.viewport().inner_rect);
+            let mut others: Vec<&usize> = self.others.keys().collect();
+            others.sort();
+            let state = format!("écrans {:?} ; plein écran {:?} ; fenêtre {:?} (réelle {real:?}) ; Mathéo {:?} ; ses fenêtres {others:?}", os::screens(), self.full.0, self.screen, self.matheo.at.map(|p| (p.x.round(), p.y.round())));
+            if state != self.logged {
+                crate::log::line(&state);
+                self.logged = state;
+            }
             // Linux: the window manager told about our windows once it lists them (Windows: their
             // frame taken off again, should one have slipped through).
             #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
