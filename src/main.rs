@@ -47,6 +47,16 @@ pub(crate) fn open(url: &str) {
 }
 
 fn main() {
+    // Linux: X11 (XWayland under Wayland), at scale 1. He works in the screens' pixels (RandR, the
+    // pointer); at another scale (125 % on Deepin) his window was smaller than the screen, and he
+    // stood out of it, unseen. As Ronnie starts its own Mathéo.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    // SAFETY: the very start, before any thread.
+    unsafe {
+        std::env::set_var("WINIT_X11_SCALE_FACTOR", "1");
+        std::env::set_var("WINIT_UNIX_BACKEND", "x11");
+        std::env::remove_var("WAYLAND_DISPLAY");
+    }
     // One Mathéo at a time: a second start just ends (the port held for the process's life). A debug
     // build has its own, to be tried beside the installed Mathéo.
     let port = if cfg!(debug_assertions) { 47_392 } else { 47_391 };
