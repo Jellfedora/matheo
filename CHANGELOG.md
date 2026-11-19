@@ -4,6 +4,12 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-19
+
+- **Rechercher une mise à jour**, dans son menu : il regarde tout de suite et dit s’il y a une nouvelle version, s’il est à jour ou s’il n’arrive pas à savoir. Sans rien demander, il regarde maintenant toutes les heures (au lieu de toutes les 6 h).
+- **Plusieurs écrans** : Mathéo ne bouge plus d’un coup quand la souris passe d’un écran à l’autre.
+- **Windows** : plus d’éclair blanc sur l’écran quand la souris change d’écran.
+
 ## [0.1.1] - 2026-11-19
 
 - **Windows** : plus de grande fenêtre blanche sur l’écran où se trouve la souris. Le fond de ses fenêtres reste transparent quand il passe d’un écran à l’autre et quand la souris passe sur lui.

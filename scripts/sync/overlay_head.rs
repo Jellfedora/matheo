@@ -67,6 +67,8 @@ enum Choice {
     Lang,
     Page,
     Install,
+    /// Look for a newer version now.
+    Check,
     Dock,
     Quit,
 }
@@ -99,7 +101,7 @@ fn menu_rows(settings: &Settings, quiet: bool) -> Vec<(String, Option<bool>, Cho
     match crate::update::state() {
         crate::update::State::Available(v) => rows.push((t.menu_install.replace("{v}", &v), None, Choice::Install)),
         crate::update::State::Installing(_) | crate::update::State::Installed(_) => rows.push((t.menu_installing.to_owned(), None, Choice::Page)),
-        _ => {}
+        _ => rows.push((t.menu_check.to_owned(), None, Choice::Check)),
     }
     rows.push((t.menu_page.to_owned(), None, Choice::Page));
     rows.push((t.menu_quit.to_owned(), None, Choice::Quit));
@@ -262,6 +264,12 @@ impl Overlay {
                 crate::update::install();
                 self.matheo.tip = Some((Said::Installing, Instant::now()));
             }
+            Choice::Check => {
+                crate::update::check();
+                // A newer version found: said again, even if already said.
+                self.told_newer = false;
+                self.matheo.tip = Some((Said::Checking, Instant::now()));
+            }
             Choice::Dock => crate::access::ask(),
             Choice::Quit => {
                 if let Some(at) = self.matheo.at {
@@ -324,7 +332,7 @@ impl eframe::App for Overlay {
         // A newer version: said once, a click on his bubble installs it. Installed, he says so and
         // starts again; failed, he says so.
         match crate::update::state() {
-            crate::update::State::Available(_) if !self.told_newer && self.matheo.tip.is_none() => {
+            crate::update::State::Available(_) if !self.told_newer && (self.matheo.tip.is_none() || matches!(self.matheo.tip, Some((Said::Checking, _)))) => {
                 self.told_newer = true;
                 self.told_failed = false;
                 self.matheo.tip = Some((Said::Update, Instant::now()));
@@ -343,6 +351,11 @@ impl eframe::App for Overlay {
                 }
                 Some(_) => {}
             },
+            // Asked from his menu: the answer replaces "I'm looking".
+            crate::update::State::Latest | crate::update::State::Unreachable if matches!(self.matheo.tip, Some((Said::Checking, _))) => {
+                let latest = crate::update::state() == crate::update::State::Latest;
+                self.matheo.tip = Some((if latest { Said::Latest } else { Said::Unreachable }, Instant::now()));
+            }
             crate::update::State::Failed(_) if !self.told_failed => {
                 self.told_failed = true;
                 self.told_newer = false;
@@ -399,9 +412,16 @@ impl eframe::App for Overlay {
         let mut busy = plant_busy;
         let mut next: f32 = 1.0;
         let here = screens.iter().position(|(s, _)| (s.min - self.screen.min).length() < 1.0).unwrap_or(0);
+        // Just sent to another screen, this window isn't there yet (the system hasn't told its new
+        // place, macOS may slide it under the menu bar): drawn from its old place, Mathéo would jump.
+        // Meanwhile he stays drawn by the window over his screen.
+        let settled = ctx.input(|i| i.viewport().inner_rect).is_none_or(|r| self.screen.contains(r.center()));
+        if !settled {
+            next = next.min(0.02);
+        }
         // Mathéo on the screen he's on (this window's, or another's).
         let plant_on = plant.map(|(at, _)| screens.iter().position(|(s, _)| s.contains(at - Vec2::new(0.0, 1.0))).unwrap_or(here));
-        if let (Some((at, look)), true) = (plant, plant_on == Some(here)) {
+        if let (Some((at, look)), true) = (plant, settled && plant_on == Some(here)) {
             paint_matheo_as(&painter, at - origin.to_vec2(), MATHEO_H, now, look);
             if let Some(can) = can {
                 paint_can(&painter, can, origin.to_vec2());
@@ -417,14 +437,17 @@ impl eframe::App for Overlay {
             busy = true;
         }
         // A window over another screen is made hidden, shown once drawn (else, on Windows, a white
-        // square first), hidden again when he's no longer there, closed a while after.
+        // square first), hidden again when he's no longer there, closed a while after. The one over
+        // his screen is also kept ready, hidden, while this window is there: when it follows the
+        // pointer away, he goes on showing at once, at the same place.
         for (i, (screen, _)) in screens.iter().enumerate() {
-            let needed = plant_on == Some(i);
-            if i == here || covered(&self.full.0, *screen) {
+            let mine = settled && i == here;
+            let needed = plant_on == Some(i) && !mine;
+            if covered(&self.full.0, *screen) {
                 self.others.remove(&i);
                 continue;
             }
-            if needed {
+            if needed || (mine && plant_on == Some(i) && screens.len() > 1) {
                 self.others.entry(i).or_insert(Other { frames: 0, needed: Instant::now() }).needed = Instant::now();
             }
             let Some(other) = self.others.get_mut(&i).filter(|o| o.needed.elapsed() < OTHER_KEPT) else {

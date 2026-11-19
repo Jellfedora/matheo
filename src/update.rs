@@ -1,5 +1,5 @@
 //! Updates from floor (the releases Mathéo's CI sends there, see floor's src/releases.js), as Ronnie
-//! does: a check at the start and every 6 hours finds a newer release; Mathéo says so, and once
+//! does: a check at the start, every hour and when asked (his menu) finds a newer release; Mathéo says so, and once
 //! accepted (a click on his bubble, or his menu), the archive built for this system is downloaded,
 //! checked against its SHA-256 digest and its Ed25519 signature (made by the CI with a key floor never
 //! sees), swapped in place of the running app, which then starts again.
@@ -51,6 +51,12 @@ struct Asset {
 pub(crate) enum State {
     #[default]
     Idle,
+    /// Looking for a newer version, asked from his menu.
+    Checking,
+    /// Asked: this version is the latest.
+    Latest,
+    /// Asked: floor couldn't be reached.
+    Unreachable,
     /// A newer version, offered.
     Available(String),
     Installing(String),
@@ -103,20 +109,43 @@ fn latest() -> Result<Option<(String, Asset)>> {
     Ok(Some((version, asset)))
 }
 
-/// Looks for a newer release at the start, then every 6 hours.
+/// Nothing being installed: a check may start.
+fn free() -> bool {
+    matches!(state(), State::Idle | State::Latest | State::Unreachable | State::Available(_) | State::Failed(_))
+}
+
+/// A newer release found: kept, offered.
+fn found(version: String, asset: Asset) {
+    if let Ok(mut found) = FOUND.lock() {
+        *found = Some((version.clone(), asset));
+    }
+    set(State::Available(version));
+}
+
+/// Looks for a newer release at the start, then every hour.
 pub(crate) fn watch() {
     std::thread::spawn(|| {
         loop {
-            if matches!(state(), State::Idle | State::Available(_) | State::Failed(_))
+            if free()
                 && let Ok(Some((version, asset))) = latest()
             {
-                if let Ok(mut found) = FOUND.lock() {
-                    *found = Some((version.clone(), asset));
-                }
-                set(State::Available(version));
+                found(version, asset);
             }
-            std::thread::sleep(Duration::from_secs(6 * 3600));
+            std::thread::sleep(Duration::from_secs(3600));
         }
+    });
+}
+
+/// Asked from his menu: looks now, and says what it found (`Available`, `Latest`, `Unreachable`).
+pub(crate) fn check() {
+    if !free() {
+        return;
+    }
+    set(State::Checking);
+    std::thread::spawn(|| match latest() {
+        Ok(Some((version, asset))) => found(version, asset),
+        Ok(None) => set(State::Latest),
+        Err(_) => set(State::Unreachable),
     });
 }
 

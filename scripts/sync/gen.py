@@ -71,6 +71,10 @@ MENU = {
     "matheo_dock": ("Salut ! Moi c’est Mathéo. Pour que je me pose sur le Dock, autorise-moi dans Accessibilité (la fenêtre de macOS). Sinon je reste juste au-dessus. Un clic droit sur moi pour mon menu.",
                     "Hi! I’m Mathéo. To stand on the Dock, allow me in Accessibility (macOS’ window). Else I stay just above it. Right-click me for my menu."),
     "menu_install": ("Installer la version {v}", "Install version {v}"),
+    "menu_check": ("Rechercher une mise à jour", "Check for updates"),
+    "matheo_checking": ("Je regarde s’il y a une nouvelle version de moi…", "Looking for a new version of me…"),
+    "matheo_latest": ("Je suis à jour, c’est ma dernière version.", "I’m up to date, this is my latest version."),
+    "matheo_unreachable": ("Je n’arrive pas à savoir s’il y a une nouvelle version. Réessaie plus tard.", "I can’t find out whether there’s a new version. Try again later."),
     "menu_installing": ("Mise à jour en cours…", "Updating…"),
     "menu_dock": ("Me poser sur le Dock…", "Stand on the Dock…"),
     "matheo_hi": ("Salut ! Moi c’est Mathéo, je veille sur toi. Un clic droit sur moi pour mon menu.",
@@ -165,19 +169,29 @@ plant = plant.replace("""    /// The horde gone.
     Installing,
     Updated,
     UpdateFailed,
+    /// Looking for a newer version, asked from his menu.
+    Checking,
+    /// Asked: he's the latest version.
+    Latest,
+    /// Asked: floor couldn't be reached.
+    Unreachable,
 }""")
 plant = plant.replace("""            Said::Hiding => Duration::from_millis(1500),""", """            Said::Hiding => Duration::from_millis(1500),
             Said::Update | Said::Hi | Said::Dock => Duration::from_secs(30),
             Said::Installing => Duration::from_secs(120),
             Said::Updated => Duration::from_secs(5),
-            Said::UpdateFailed => Duration::from_secs(8),""")
+            Said::UpdateFailed | Said::Latest | Said::Unreachable => Duration::from_secs(8),
+            Said::Checking => Duration::from_secs(40),""")
 plant = plant.replace("""            Said::Gone => t.matheo_gone,""", """            Said::Gone => t.matheo_gone,
             Said::Update => t.matheo_update,
             Said::Hi => t.matheo_hi,
             Said::Dock => t.matheo_dock,
             Said::Installing => t.matheo_installing,
             Said::Updated => t.matheo_updated,
-            Said::UpdateFailed => t.matheo_update_failed,""")
+            Said::UpdateFailed => t.matheo_update_failed,
+            Said::Checking => t.matheo_checking,
+            Said::Latest => t.matheo_latest,
+            Said::Unreachable => t.matheo_unreachable,""")
 assert "Said::Update" in plant and "t.matheo_hi" in plant
 
 ui_from = find("        // Mathéo: grabbed with the mouse")
