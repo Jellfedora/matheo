@@ -49,6 +49,9 @@ struct Overlay {
     /// The windows over the other screens, by screen: kept a while once nothing goes along them
     /// (hidden), not made again each time.
     others: std::collections::HashMap<usize, Other>,
+    /// Windows: frames left to clear what stays behind the drawing (see `glass`), after a change
+    /// that may have made it white.
+    glass: u8,
 }
 
 /// A window over another screen than the pointer's.
@@ -886,6 +889,15 @@ enum Choice {
     Quit,
 }
 
+/// Frames during which the windows are cleared after a change (Windows applies it a little later).
+const GLASS: u8 = 4;
+
+/// Windows: clears behind the drawing of each window of ours (see `crate::glass`).
+fn clear_glass() {
+    #[cfg(windows)]
+    crate::glass::clear();
+}
+
 const MENU_W: f32 = 240.0;
 const ROW_H: f32 = 30.0;
 
@@ -1025,7 +1037,7 @@ pub(crate) fn run(settings: Settings) {
                     crate::access::ask();
                 }
             }
-            Ok(Box::new(Overlay { mouse, settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default() }))
+            Ok(Box::new(Overlay { mouse, settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), glass: GLASS }))
         }),
     );
     if let Err(e) = result {
@@ -1097,6 +1109,7 @@ impl eframe::App for Overlay {
             // frame taken off again, should one have slipped through).
             #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
             os::tune_all();
+            clear_glass();
         }
         let covered = |full: &[Rect], screen: Rect| full.iter().any(|f| (f.min - screen.min).length() < 1.0 && (f.max - screen.max).length() < 1.0);
         if covered(&self.full.0, self.screen) {
@@ -1113,6 +1126,7 @@ impl eframe::App for Overlay {
             self.work = work;
             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(screen.min));
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(screen.size()));
+            self.glass = GLASS;
         }
         // Where this window really is: macOS may have slid it under the menu bar (and cut it to fit), so
         // everything is drawn from its true top left, not the screen's.
@@ -1379,6 +1393,7 @@ impl eframe::App for Overlay {
             if pass != plant.pass {
                 plant.pass = pass;
                 ctx.send_viewport_cmd(egui::ViewportCommand::MousePassthrough(pass));
+                self.glass = GLASS;
             }
         }
         if let Some(at) = open_menu {
@@ -1431,6 +1446,10 @@ impl eframe::App for Overlay {
                 continue;
             };
             let visible = needed && other.frames >= 2;
+            if other.frames < 2 + u32::from(GLASS) {
+                // Just made or shown: cleared too.
+                self.glass = self.glass.max(1);
+            }
             other.frames = other.frames.saturating_add(1);
             if needed && !visible {
                 // Drawn again at once, to be shown.
@@ -1486,6 +1505,11 @@ impl eframe::App for Overlay {
         }
         if cfg!(debug_assertions) && std::env::var_os("MATHEO_GALLERY").is_some() {
             paint_matheo_gallery(&painter, self.screen.translate(-origin.to_vec2()), now);
+            busy = true;
+        }
+        if self.glass > 0 {
+            self.glass -= 1;
+            clear_glass();
             busy = true;
         }
         if busy {

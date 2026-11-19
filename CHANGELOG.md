@@ -4,6 +4,10 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-19
+
+- **Windows** : plus de grande fenêtre blanche sur l’écran où se trouve la souris. Le fond de ses fenêtres reste transparent quand il passe d’un écran à l’autre et quand la souris passe sur lui.
+
 ## [0.1.0] - 2026-11-18
 
 Première version : Mathéo, la plante verte de Ronnie, en appli à part pour macOS, Windows et Linux.

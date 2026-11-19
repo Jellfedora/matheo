@@ -9,6 +9,8 @@
 
 mod access;
 mod autostart;
+#[cfg(windows)]
+mod glass;
 mod i18n;
 mod overlay;
 mod settings;
