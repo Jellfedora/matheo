@@ -23,6 +23,8 @@ Ronnie (où Mathéo est une récompense de Riff Hero), pour macOS, Windows et Li
 - En saison : bonnet et neige à Noël (1er–25 déc.), chapeau de fête et confettis au Nouvel an (31 déc.–2 janv.), nœud et cœurs à la Saint-Valentin, oreilles de lapin et œuf la semaine de Pâques, chapeau de sorcière et chauve-souris à Halloween (25–31 oct.). Propre à l’appli (`scripts/sync/season.rs`), pas dans Ronnie.
 - Caché sur un écran qu’une autre appli remplit (un film, un jeu), sauf Ronnie.
 - Attrapé, lancé (physique, rebonds), secoué (6 allers-retours vifs) : muet 6 h.
+- Lancé : yeux ronds en vol, écrasé et rebondissant à l’atterrissage, poussière quand il tombe fort ou glisse au sol ; lâché de haut (plus de 260 pt au-dessus du sol), un parachute une fois sur trois. Propre à l’appli (`scripts/sync/antics.rs`), pas dans Ronnie.
+- En semaine : la pause à 10 h et 16 h, manger à 12 h, rentrer à 18 h (dans la demi-heure, une fois chacune, ses conseils activés et pas muet), réglables dans son menu. Entre ses conseils, toutes les 40 min : yeux, posture, respiration (et l’eau l’été). Lundi matin, la lampe les soirs d’hiver (17 h, novembre à janvier), le week-end, ton retour après 1 h d’absence. Ton prénom, demandé une fois (bulle, puis une petite fenêtre), glissé dans certaines phrases. Propre à l’appli (`scripts/sync/care.rs`).
 - macOS : posé sur le Dock grâce à l’Accessibilité (demandée au premier lancement, et dans son menu tant qu’elle manque) ; sans elle, juste au-dessus.
 - Clic droit sur lui : son menu (sa version, conseils, se taire, lancer au démarrage, langue, rechercher ou installer une mise à jour, son site, quitter).
 - Une seule instance à la fois (port local 47391). Lancé au démarrage dès la première fois (LaunchAgent, clé Run, ~/.config/autostart).
@@ -37,12 +39,12 @@ l’appli et la relance.
 ## Développer
 
 - `cargo run` : le lance, à côté du Mathéo installé (un build de debug a son port, 47392, et ses réglages, `Matheo-dev`).
-- `MATHEO_GALLERY=1 cargo run` : tous ses états et ses tenues côte à côte ; `MATHEO_CLOCK=late|friday` force l’heure, `MATHEO_SEASON=christmas|newyear|valentine|easter|halloween` la tenue (builds de debug seulement).
+- `MATHEO_GALLERY=1 cargo run` : tous ses états et ses tenues côte à côte ; `MATHEO_CLOCK=late|friday|10|12|16|17|18|saturday` force l’heure, `MATHEO_CHUTE=1` le parachute à chaque chute, `MATHEO_CARE=1` ses soins toutes les 20 s ; son menu a une page « Démo… » qui joue chaque animation et chaque phrase, `MATHEO_SEASON=christmas|newyear|valentine|easter|halloween` la tenue (builds de debug seulement).
 - `cargo test`, `cargo clippy`.
 - Le test sur un bureau Windows et Linux : `gh workflow run smoke.yml` (`scripts/smoke/`) ; il démarre Mathéo, le survole, le lance, ouvre son menu, et garde des captures et son journal dans les artefacts du run (un seul écran, pas de vraie carte graphique).
 - Son journal : `matheo.log` dans le dossier de config (aussi dans son menu, « Son journal »), refait à chaque lancement.
 - L’icône : `scripts/make-icon.py` (Pillow) écrit `assets/icon.png`, `Matheo.icns`, `matheo.ico`.
-- Le code de Mathéo vient de Ronnie (`src/app/desktop.rs`, `src/i18n.rs`) : `python3 scripts/sync/gen.py` regénère `src/overlay.rs` et `src/i18n.rs` depuis `../bipbip` (ou `RONNIE_DIR`). Ce qui est propre à l’appli (fenêtre, menu, mise à jour) se change dans `scripts/sync/overlay_head.rs`, ses tenues dans `scripts/sync/season.rs`, pas dans `src/overlay.rs`.
+- Le code de Mathéo vient de Ronnie (`src/app/desktop.rs`, `src/i18n.rs`) : `python3 scripts/sync/gen.py` regénère `src/overlay.rs` et `src/i18n.rs` depuis `../bipbip` (ou `RONNIE_DIR`). Ce qui est propre à l’appli (fenêtre, menu, mise à jour) se change dans `scripts/sync/overlay_head.rs`, ses tenues dans `scripts/sync/season.rs`, ses animations dans `scripts/sync/antics.rs`, ses phrases à lui et ses horaires dans `scripts/sync/care.rs`, pas dans `src/overlay.rs`.
 
 ## Publier
 

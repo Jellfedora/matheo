@@ -2,7 +2,7 @@
 """Builds src/i18n.rs and src/overlay.rs from Ronnie's Mathéo (its src/app/desktop.rs and src/i18n.rs).
 
 Ronnie's repository next to this one (../bipbip), or its path in RONNIE_DIR. Mathéo's own parts (his
-window, his menu, the update) are in overlay_head.rs, his season outfits in season.rs, next to this script: change them there, then run
+window, his menu, the update) are in overlay_head.rs, his season outfits in season.rs, his antics in antics.rs, his own words and hours in care.rs, next to this script: change them there, then run
 `python3 scripts/sync/gen.py` and check with `cargo test` and `cargo clippy`.
 """
 import re
@@ -68,8 +68,8 @@ MENU = {
     "matheo_installing": ("Je me mets à jour… ne bouge pas.", "Updating myself… don’t move."),
     "matheo_updated": ("C’est installé, je reviens tout de suite !", "Installed, I’ll be right back!"),
     "matheo_update_failed": ("La mise à jour n’a pas marché. Je réessaierai plus tard.", "The update didn’t work. I’ll try again later."),
-    "matheo_dock": ("Salut ! Moi c’est Mathéo. Pour que je me pose sur le Dock, autorise-moi dans Accessibilité (la fenêtre de macOS). Sinon je reste juste au-dessus. Un clic droit sur moi pour mon menu.",
-                    "Hi! I’m Mathéo. To stand on the Dock, allow me in Accessibility (macOS’ window). Else I stay just above it. Right-click me for my menu."),
+    "matheo_dock": ("Coucou ! Moi c’est Mathéo, ta nouvelle plante de bureau. Je veille sur toi, et toi tu m’arroses : marché conclu ? Pour que je me pose sur le Dock, autorise-moi dans Accessibilité (la fenêtre de macOS) ; sinon je reste juste au-dessus. Un clic droit sur moi pour mon menu !",
+                    "Hi there! I’m Mathéo, your new desk plant. I look after you, you water me: deal? To stand on the Dock, allow me in Accessibility (macOS’ window); else I stay just above it. Right-click me for my menu!"),
     "menu_install": ("Installer la version {v}", "Install version {v}"),
     "menu_check": ("Rechercher une mise à jour", "Check for updates"),
     "menu_journal": ("Son journal (en cas de souci)", "His log (if something's wrong)"),
@@ -78,18 +78,59 @@ MENU = {
     "matheo_unreachable": ("Je n’arrive pas à savoir s’il y a une nouvelle version. Réessaie plus tard.", "I can’t find out whether there’s a new version. Try again later."),
     "menu_installing": ("Mise à jour en cours…", "Updating…"),
     "menu_dock": ("Me poser sur le Dock…", "Stand on the Dock…"),
-    "matheo_hi": ("Salut ! Moi c’est Mathéo, je veille sur toi. Un clic droit sur moi pour mon menu.",
-                  "Hi! I’m Mathéo, I look after you. Right-click me for my menu."),
+    "breathe_in": ("Inspire par le nez… {n}", "Breathe in through your nose… {n}"),
+    "breathe_out": ("Souffle tout doucement par la bouche… {n}", "Breathe out slowly through your mouth… {n}"),
+    "breathe_count": ("Respiration {k} sur {of}", "Breath {k} of {of}"),
+    "matheo_ask_name": ("Au fait…\nComment je peux t’appeler ?\nClique dans la case et écris ton prénom :",
+                        "By the way…\nWhat should I call you?\nClick in the box and type your name:"),
+    "matheo_psst": ("Psst, {name}… ", "Psst, {name}… "),
+    "menu_name": ("Mon prénom…", "My name…"),
+    "name_hint": ("Ton prénom", "Your name"),
+    "name_ok": ("C’est moi !", "That’s me!"),
+    "name_later": ("Passer", "Skip"),
+    "menu_hours": ("Mes horaires…", "My hours…"),
+    "menu_back": ("‹ Retour", "‹ Back"),
+    "menu_hours_on": ("Ses rappels d’horaires", "His time reminders"),
+    "menu_hour_morning": ("Pause du matin", "Morning break"),
+    "menu_hour_lunch": ("Repas", "Lunch"),
+    "menu_hour_afternoon": ("Pause de l’aprèm", "Afternoon break"),
+    "menu_hour_home": ("Fin de journée", "End of the day"),
+    "menu_hours_reset": ("Remettre par défaut", "Back to default"),
+    "matheo_hi": ("Coucou ! Moi c’est Mathéo, ta nouvelle plante de bureau. Je veille sur toi : de l’eau, un peu de mouvement, des pauses. En échange, juste un petit coup d’arrosoir de temps en temps. Un clic droit sur moi pour mon menu !",
+                  "Hi there! I’m Mathéo, your new desk plant. I look after you: water, a bit of moving, breaks. In return, just a little watering now and then. Right-click me for my menu!"),
 }
+V = {
+    'matheo_pause': (['C’est l’heure de la pause, {name} ! Lève-toi, étire-toi, va prendre l’air : la pause, c’est important. Je garde l’écran, promis.', 'Pause ! Tes jambes ont envie de faire un tour, et ton cerveau d’un petit café. Vas-y, je ne touche à rien.', 'Hop hop hop, {name}, c’est la pause ! Même moi je fais la sieste entre deux arrosages. La pause, c’est sacré.', 'Ding ding ! C’est l’heure de souffler un peu. Cinq minutes loin de l’écran, et tu reviens tout neuf.'], ['Break time, {name}! Get up, stretch, get some fresh air: breaks matter. I’ll guard the screen, promise.', 'Break! Your legs want a little walk, and your brain a little coffee. Go on, I won’t touch a thing.', 'Hop hop hop, {name}, break time! Even I nap between waterings. Breaks are sacred.', 'Ding ding! Time to catch your breath. Five minutes away from the screen and you’ll be good as new.']),
+    'matheo_lunch': (['C’est l’heure de manger ! Ton assiette t’attend (moi je me contente d’un verre d’eau, mais toi tu mérites mieux).', 'Miam, {name}, c’est l’heure du repas ! Et pas devant l’écran, hein : je surveille.', 'Ton ventre gargouille, je l’entends d’ici ! File manger, le travail ne s’envolera pas.', 'À table ! Un vrai repas, assis, sans écran. Moi je fais un peu de photosynthèse en t’attendant.'], ['Time to eat! Your plate is waiting (I’ll make do with a glass of water, but you deserve better).', 'Yum, {name}, lunchtime! And not in front of the screen, okay? I’m watching.', 'I can hear your tummy rumbling from here! Go eat, the work won’t fly away.', 'Lunch is served! A real meal, sitting down, no screen. I’ll do some photosynthesis while I wait.']),
+    'matheo_home': (['C’est l’heure ! On ferme tout et on rentre à la maison. Tu as bien bossé, {name}, je suis fier de toi.', 'Fin de journée ! Range tes affaires, éteins tout, et va faire un truc qui te fait plaisir.', 'Et c’est fini pour aujourd’hui ! Le reste attendra demain, promis. Rentre bien, {name}.', 'Clap de fin ! Tu as fait de ton mieux, et c’est déjà beaucoup. Allez, ouste, à la maison !'], ['It’s time! Close everything and head home. You worked well, {name}, I’m proud of you.', 'End of the day! Pack up, switch off, and go do something you enjoy.', 'That’s it for today! The rest can wait until tomorrow, promise. Get home safe, {name}.', 'That’s a wrap! You did your best, and that’s already a lot. Off you go, home!']),
+    'matheo_monday': (['Bon lundi, {name} ! On y va tout doux, une chose après l’autre. Moi je pousse à mon rythme, et ça marche.', 'Lundi matin… courage ! Un café, une petite liste, et on attaque la semaine tranquillement.', 'Coucou, nouvelle semaine ! J’ai un bon pressentiment pour celle-là, {name}.'], ['Happy Monday, {name}! Easy does it, one thing at a time. I grow at my own pace, and it works.', 'Monday morning… hang in there! A coffee, a little to-do list, and we start the week gently.', 'Hello, new week! I have a good feeling about this one, {name}.']),
+    'matheo_lamp': (['Il fait déjà nuit… Allume une lampe ! Tes yeux te diront merci (et moi j’aime bien la lumière aussi).', 'Brr, il fait sombre ! Une petite lampe, et c’est tout de suite plus doux pour tes yeux.', 'Le soleil est parti se coucher. Allume la lumière, on n’est pas des chauves-souris !'], ['It’s already dark… Switch a lamp on! Your eyes will thank you (and I like light too).', 'Brr, it’s getting dark! A little lamp and it’s much gentler on your eyes.', 'The sun has gone to bed. Switch the light on, we’re not bats!']),
+    'matheo_weekend_work': (['Psst, {name}… c’est le week-end. Tu es sûr de vouloir travailler ? Va jouer dehors, je garde la maison !', 'Euh… on est le week-end, tu sais ? Même le travail a besoin de se reposer.', 'Week-end détecté ! Si c’est pour le plaisir, d’accord. Sinon, file te reposer, {name}.'], ['Psst, {name}… it’s the weekend. Are you sure you want to work? Go play outside, I’ll mind the house!', 'Um… it’s the weekend, you know? Even work needs a rest.', 'Weekend detected! If it’s for fun, fine. Otherwise, go and rest, {name}.']),
+    'matheo_eyes': (['Petite pause pour tes yeux : regarde au loin pendant 20 secondes. Par la fenêtre, c’est encore mieux !', 'Tes yeux fixent l’écran depuis un moment… Regarde un truc loin, très loin, pendant 20 secondes.', 'Jeu du jour : trouve l’objet le plus éloigné de toi et regarde-le 20 secondes. Tes yeux adorent ce jeu.', 'Cligne des yeux, regarde au loin, et souris. Voilà, tes yeux sont tout reposés (et moi je suis content).'], ['A little break for your eyes: look far away for 20 seconds. Out of the window is even better!', 'Your eyes have been staring at the screen for a while… Look at something far, far away for 20 seconds.', 'Game of the day: find the furthest thing from you and look at it for 20 seconds. Your eyes love this game.', 'Blink, look far away, and smile. There, your eyes are all rested (and I’m happy).']),
+    'matheo_posture': (['Hop, on se redresse ! Le dos droit, les épaules en arrière… comme moi. Bon, moi j’ai un pot, c’est plus facile.', 'Tu ne serais pas un peu en train de te ratatiner, {name} ? Redresse-toi, comme une belle plante !', 'Check posture : pieds au sol, dos contre le dossier, épaules détendues. Parfait, on dirait moi.', 'Étire-toi vers le plafond, comme pour attraper le soleil. Ahhh, ça fait du bien, non ?'], ['Up we sit! Back straight, shoulders back… like me. Well, I have a pot, it’s easier.', 'Are you shrivelling up a little, {name}? Sit up straight, like a proud plant!', 'Posture check: feet on the floor, back against the chair, shoulders relaxed. Perfect, you look like me.', 'Stretch up to the ceiling, as if to catch the sun. Ahhh, feels good, doesn’t it?']),
+    'matheo_breathe': (['On respire ensemble ? Quatre grandes respirations, suis-moi : je gonfle, tu inspires ; je dégonfle, tu souffles.', 'Petite pause respiration, {name} ? Regarde-moi : quand je gonfle, tu inspires ; quand je dégonfle, tu souffles.', 'Allez, quatre grandes bouffées d’air ensemble. Je montre l’exemple, tu me suis !'], ['Shall we breathe together? Four deep breaths, follow me: I swell, you breathe in; I shrink, you breathe out.', 'A little breathing break, {name}? Watch me: when I swell, breathe in; when I shrink, breathe out.', 'Come on, four big breaths of air together. I’ll lead, you follow!']),
+    'breathe_done': (['Et voilà ! Tu te sens plus léger, non ? Moi j’ai l’impression d’avoir pris une feuille.', 'Bravo ! Quatre respirations, zéro stress. On refait ça quand tu veux.', 'Ahhh… tout calme. Tu vois, c’est facile d’être une plante.'], ['There you go! Feeling lighter? I feel like I grew a leaf.', 'Well done! Four breaths, zero stress. Let’s do it again whenever you like.', 'Ahhh… all calm. See, being a plant is easy.']),
+    'matheo_hot': (['Il fait chaud ! Un grand verre d’eau pour toi, un petit pour moi ?', 'Ouf, quelle chaleur ! Bois un coup, {name}, avant de fondre comme une glace.', 'Mode canicule activé : de l’eau, de l’eau, et encore de l’eau !'], ['It’s hot! A big glass of water for you, a little one for me?', 'Phew, what a heat! Have a drink, {name}, before you melt like an ice cream.', 'Heatwave mode on: water, water, and more water!']),
+    'matheo_back': (['Te revoilà, {name} ! Tu m’as manqué.', 'Ah, tu es là ! Je t’ai gardé ta place bien au chaud.', 'Coucou ! Je commençais à parler tout seul…', 'Re-bonjour, {name} ! On reprend où on en était ?'], ['There you are, {name}! I missed you.', 'Ah, you’re here! I kept your seat nice and warm.', 'Hi! I was starting to talk to myself…', 'Hello again, {name}! Shall we pick up where we left off?']),
+    'matheo_named': (['Enchanté, {name} ! Je retiens, promis. Moi c’est toujours Mathéo, hein.', '{name} ! Quel joli prénom. Je vais le dire souvent, tu verras.'], ['Nice to meet you, {name}! I’ll remember, promise. I’m still Mathéo, by the way.', '{name}! What a lovely name. I’ll say it often, you’ll see.']),
+    'matheo_again': (['Coucou, c’est encore moi ! Je me suis fait une petite beauté (nouvelle version), et j’ai appris plein de trucs.', 'Tadaa ! Une nouvelle version de moi, toute fraîche. Et j’ai des surprises pour toi.'], ['Hi, it’s me again! I got a little makeover (new version) and learned lots of new tricks.', 'Ta-da! A brand new version of me. And I have surprises for you.']),
+    'more_ouch': (['Aïe !', 'Ouille, ma tête !', 'Aïeuh ! Doucement…', 'Bonk ! Je vois des étoiles…'], ['Ouch!', 'Ow, my head!', 'Ouchie! Gently…', 'Bonk! I see stars…']),
+    'more_shaking': (['Waaaah ! Arrête !', 'Je vais avoir mal au cœur !', 'Pas si fort, j’ai la tête qui tourne !'], ['Waaaah! Stop it!', 'I’m going to be sick!', 'Not so hard, my head’s spinning!']),
+    'more_thanks': (['Merci ! Santé ! Ça fait du bien.', 'Ahhh, délicieux ! Merci, {name}.', 'Glou glou glou… Je revis !', 'Merci ! Je sens que je vais pousser d’un coup.'], ['Thanks! Cheers! That feels good.', 'Ahhh, delicious! Thank you, {name}.', 'Glug glug glug… I’m alive again!', 'Thanks! I can feel myself growing.']),
+    'more_thirsty': (['J’ai soif… et toi aussi, sûrement. Un grand verre d’eau, puis un coup d’arrosoir ?', 'Mes feuilles font la tête… Un peu d’eau pour moi, et un verre pour toi ?', 'Je suis tout sec, {name}… On boit un coup ensemble ?'], ["I'm thirsty… and so are you, surely. A big glass of water, then the watering can?", 'My leaves are sulking… A little water for me, and a glass for you?', 'I’m all dry, {name}… Shall we have a drink together?']),
+}
+
 decl = "\n".join(
     [f"    pub {f}: &'static [&'static str]," if f in ("matheo_water", "matheo_moves", "matheo_bed", "matheo_weekend", "matheo_break")
      else f"    pub {f}: &'static str," for f in FIELDS]
     + [f"    pub {k}: &'static str," for k in MENU]
+    + [f"    pub {k}: &'static [&'static str]," for k in V]
 )
 
 
 def body(sec, idx):
-    return "\n".join([value(sec, f) for f in FIELDS] + [f'    {k}: "{v[idx]}",' for k, v in MENU.items()])
+    lists = [f"    {k}: &[\n" + "".join(f'        "{x}",\n' for x in v[idx]) + "    ]," for k, v in V.items()]
+    return "\n".join([value(sec, f) for f in FIELDS] + [f'    {k}: "{v[idx]}",' for k, v in MENU.items()] + lists)
 
 
 (OUT / "i18n.rs").write_text(f'''//! Mathéo's words, in French and in English (taken from Ronnie's).
@@ -176,13 +217,16 @@ plant = plant.replace("""    /// The horde gone.
     Latest,
     /// Asked: floor couldn't be reached.
     Unreachable,
+    /// What he says of his own (see `care.rs`).
+    Own(Own),
 }""")
 plant = plant.replace("""            Said::Hiding => Duration::from_millis(1500),""", """            Said::Hiding => Duration::from_millis(1500),
             Said::Update | Said::Hi | Said::Dock => Duration::from_secs(30),
             Said::Installing => Duration::from_secs(120),
             Said::Updated => Duration::from_secs(5),
             Said::UpdateFailed | Said::Latest | Said::Unreachable => Duration::from_secs(8),
-            Said::Checking => Duration::from_secs(40),""")
+            Said::Checking => Duration::from_secs(40),
+            Said::Own(o) => o.lasts(),""")
 plant = plant.replace("""            Said::Gone => t.matheo_gone,""", """            Said::Gone => t.matheo_gone,
             Said::Update => t.matheo_update,
             Said::Hi => t.matheo_hi,
@@ -192,7 +236,8 @@ plant = plant.replace("""            Said::Gone => t.matheo_gone,""", """       
             Said::UpdateFailed => t.matheo_update_failed,
             Said::Checking => t.matheo_checking,
             Said::Latest => t.matheo_latest,
-            Said::Unreachable => t.matheo_unreachable,""")
+            Said::Unreachable => t.matheo_unreachable,
+            Said::Own(o) => o.text(t, 0),""")
 assert "Said::Update" in plant and "t.matheo_hi" in plant
 
 ui_from = find("        // Mathéo: grabbed with the mouse")
@@ -226,6 +271,14 @@ reps = [
     ("Some(p) => Mouse { at: Some(Pos2::new(f32::from(p.root_x), f32::from(p.root_y))), pressed: p.mask.contains(KeyButMask::BUTTON1) },",
      "Some(p) => Mouse { at: Some(Pos2::new(f32::from(p.root_x), f32::from(p.root_y))), pressed: p.mask.contains(KeyButMask::BUTTON1), right: p.mask.contains(KeyButMask::BUTTON3) },"),
     ('"Ronnie\'s rewards over the screen"', '"Mathéo over the screen"'),
+    # Windows: the frame left to DWM (see the comment put in its place).
+    ("use windows_sys::Win32::Graphics::Dwm::{DWMNCRP_DISABLED, DWMWA_BORDER_COLOR, DWMWA_NCRENDERING_POLICY, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DwmSetWindowAttribute};",
+     "use windows_sys::Win32::Graphics::Dwm::{DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DwmSetWindowAttribute};"),
+    ("            set(DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED as u32);\n",
+     "            // Not DWMNCRP_DISABLED: winit's windows keep WS_CAPTION | WS_BORDER (their frame only\n"
+     "            // trimmed through WM_NCCALCSIZE), and without DWM drawing the frame, DefWindowProc painted\n"
+     "            // a classic one over the whole window at each WM_NCACTIVATE (him taking or losing the\n"
+     "            // focus): a screen-sized frame around nothing.\n"),
 ]
 for a, b in reps:
     assert a in oses, a
@@ -246,6 +299,8 @@ tests = tests.replace("crate::i18n::Lang::ALL", "crate::i18n::Lang::ALL")
 
 overlay = (HERE / "overlay_head.rs").read_text()
 overlay = overlay.replace("//@SEASON@", (HERE / "season.rs").read_text().rstrip())
+overlay = overlay.replace("//@ANTICS@", (HERE / "antics.rs").read_text().rstrip())
+overlay = overlay.replace("//@CARE@", (HERE / "care.rs").read_text().rstrip())
 overlay = overlay.replace("//@PLANT@", plant).replace("//@BLOCK@", block).replace("//@OS@", oses).replace("//@TESTS@", tests)
 (OUT / "overlay.rs").write_text(overlay)
 print("ok", len(overlay.split(chr(10))), "lines")

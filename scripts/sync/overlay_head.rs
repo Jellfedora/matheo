@@ -51,6 +51,14 @@ struct Overlay {
     others: std::collections::HashMap<usize, Other>,
     /// The season's outfit he wears (Christmas, Halloween...), looked at each minute.
     season: Option<Season>,
+    /// His own antics (a parachute, dust, wobbling as he lands): see `antics.rs`.
+    antics: Antics,
+    /// What he says of his own, and when (see `care.rs`).
+    care: Care,
+    /// The page his menu shows.
+    page: Page,
+    /// Your name being typed in his bubble (see `Naming`).
+    naming: Option<Naming>,
     /// What the journal last said of the windows (said again when it changes).
     logged: String,
     /// Windows: frames left to clear what stays behind the drawing (see `glass`), after a change
@@ -77,6 +85,18 @@ enum Choice {
     Journal,
     Dock,
     Quit,
+    /// The page of his time reminders, and back.
+    Hours,
+    /// Your name, in its window.
+    Name,
+    /// Debug builds: the demo page, and one of its antics or words.
+    Demo,
+    Play(Demo),
+    Back,
+    HoursOn,
+    /// One of his time reminders: a click on its − or + moves it.
+    Hour(usize),
+    HoursReset,
 }
 
 /// Debug builds, for the smoke test (scripts/smoke/): the pointer read from the file
@@ -106,14 +126,34 @@ fn clear_glass() {
 }
 
 const MENU_W: f32 = 240.0;
+/// A time reminder's row: its − and + buttons, from the menu's right edge (their left side).
+const HOUR_MINUS: f32 = 108.0;
+const HOUR_PLUS: f32 = 32.0;
 const ROW_H: f32 = 30.0;
 
 /// His menu's rows: what each says, whether it's a switch (and on), what it does.
-fn menu_rows(settings: &Settings, quiet: bool) -> Vec<(String, Option<bool>, Choice)> {
+/// On his time reminders' page, a reminder's row says its time after a tab (drawn on the right,
+/// between − and +).
+fn menu_rows(settings: &Settings, quiet: bool, page: Page) -> Vec<(String, Option<bool>, Choice)> {
     let t = settings.lang.strings();
+    if page == Page::Demo {
+        let mut rows = vec![(t.menu_back.to_owned(), None, Choice::Back)];
+        rows.extend(DEMOS.iter().map(|(label, demo)| ((*label).to_owned(), None, Choice::Play(*demo))));
+        return rows;
+    }
+    if page == Page::Hours {
+        let h = settings.hours;
+        let names = [t.menu_hour_morning, t.menu_hour_lunch, t.menu_hour_afternoon, t.menu_hour_home];
+        let mut rows = vec![(t.menu_back.to_owned(), None, Choice::Back), (t.menu_hours_on.to_owned(), Some(h.on), Choice::HoursOn)];
+        rows.extend(names.iter().enumerate().map(|(k, name)| (format!("{name}\t{:2}:{:02}", h.at[k] / 60, h.at[k] % 60), None, Choice::Hour(k))));
+        rows.push((t.menu_hours_reset.to_owned(), None, Choice::HoursReset));
+        return rows;
+    }
     let mut rows = vec![
         (t.menu_version.replace("{v}", crate::update::VERSION), None, Choice::Version),
         (t.menu_tips_on.to_owned(), Some(settings.tips), Choice::Tips),
+        (t.menu_hours.to_owned(), None, Choice::Hours),
+        (t.menu_name.to_owned(), None, Choice::Name),
         ((if quiet { t.menu_speak } else { t.menu_quiet }).to_owned(), None, Choice::Quiet),
         (t.menu_autostart.to_owned(), Some(settings.autostart), Choice::Autostart),
         (t.menu_lang.to_owned(), None, Choice::Lang),
@@ -128,9 +168,60 @@ fn menu_rows(settings: &Settings, quiet: bool) -> Vec<(String, Option<bool>, Cho
     }
     rows.push((t.menu_page.to_owned(), None, Choice::Page));
     rows.push((t.menu_journal.to_owned(), None, Choice::Journal));
+    if cfg!(debug_assertions) {
+        rows.push(("Démo…".to_owned(), None, Choice::Demo));
+    }
     rows.push((t.menu_quit.to_owned(), None, Choice::Quit));
     rows
 }
+
+/// His menu's pages.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Page {
+    Main,
+    /// His time reminders.
+    Hours,
+    /// Debug builds: each of his antics and words at a click.
+    Demo,
+}
+
+/// Debug builds: what the demo page plays.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Demo {
+    /// Up high, coming down under his parachute.
+    Chute,
+    /// Up high, falling hard.
+    Land,
+    /// Sliding along the floor.
+    Slide,
+    /// His hello, the very first time.
+    Hello,
+    /// His advice (the watering can with water).
+    Advice,
+    Say(Own),
+}
+
+const DEMOS: [(&str, Demo); 19] = [
+    ("Parachute", Demo::Chute),
+    ("Chute et atterrissage", Demo::Land),
+    ("Glissade", Demo::Slide),
+    ("Présentation (1er lancement)", Demo::Hello),
+    ("Demande du prénom", Demo::Say(Own::AskName)),
+    ("Prénom retenu", Demo::Say(Own::Named)),
+    ("Un conseil", Demo::Advice),
+    ("Pause du matin", Demo::Say(Own::Clock(0))),
+    ("Repas", Demo::Say(Own::Clock(1))),
+    ("Pause de l’aprèm", Demo::Say(Own::Clock(2))),
+    ("Fin de journée", Demo::Say(Own::Clock(3))),
+    ("Lundi matin", Demo::Say(Own::Monday)),
+    ("La lampe (soir d’hiver)", Demo::Say(Own::Lamp)),
+    ("Travail le week-end", Demo::Say(Own::Weekend)),
+    ("Les yeux", Demo::Say(Own::Eyes)),
+    ("La posture", Demo::Say(Own::Posture)),
+    ("Respirer ensemble", Demo::Say(Own::Breathe)),
+    ("Il fait chaud", Demo::Say(Own::Hot)),
+    ("Retour après une absence", Demo::Say(Own::Back)),
+];
 
 /// Where his menu shows (screen points): from the click, kept within the screen.
 fn menu_rect(at: Pos2, rows: usize, screen: Rect) -> Rect {
@@ -158,7 +249,18 @@ fn paint_menu(painter: &egui::Painter, rect: Rect, rows: &[(String, Option<bool>
             Choice::Install => Color32::from_rgb(40, 120, 40),
             _ => ink,
         };
+        let (label, time) = label.split_once('\t').map_or((label.as_str(), None), |(l, t)| (l, Some(t)));
         painter.text(row.left_center() + Vec2::new(10.0, 0.0), egui::Align2::LEFT_CENTER, label, FontId::proportional(14.0), color);
+        if let Some(time) = time {
+            // − 10:00 +, the buttons lit under the pointer.
+            let right = row.right_center();
+            painter.text(right - Vec2::new(HOUR_PLUS - 6.0 + 30.0, 0.0), egui::Align2::CENTER_CENTER, time, FontId::monospace(13.0), ink);
+            for (x, sign) in [(HOUR_MINUS, "−"), (HOUR_PLUS, "+")] {
+                let c = right - Vec2::new(x - 13.0, 0.0);
+                painter.circle_filled(c, 10.0, Color32::from_rgb(222, 238, 206));
+                painter.text(c, egui::Align2::CENTER_CENTER, sign, FontId::proportional(15.0), green);
+            }
+        }
         if let Some(on) = switch {
             // A small switch: a track, its knob on the right when on.
             let track = Rect::from_center_size(row.right_center() - Vec2::new(24.0, 0.0), Vec2::new(30.0, 16.0));
@@ -260,7 +362,7 @@ pub(crate) fn run(settings: Settings) {
                     crate::access::ask();
                 }
             }
-            Ok(Box::new(Overlay { mouse, settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), logged: String::new(), glass: GLASS }))
+            Ok(Box::new(Overlay { mouse, settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), antics: Antics::default(), care: Care::new(first), page: Page::Main, naming: None, logged: String::new(), glass: GLASS }))
         }),
     );
     match result {
@@ -270,6 +372,74 @@ pub(crate) fn run(settings: Settings) {
 }
 
 impl Overlay {
+    /// Debug builds: plays one of his antics or words (see `DEMOS`).
+    fn play(&mut self, demo: Demo) {
+        let m = &mut self.matheo;
+        let Some(at) = m.at else { return };
+        let now = Instant::now();
+        let top = os::screen_at(at).map_or(self.screen.min.y, |(_, work)| work.min.y) + MATHEO_H + 80.0;
+        match demo {
+            Demo::Chute | Demo::Land => {
+                m.at = Some(Pos2::new(at.x, (at.y - 600.0).max(top)));
+                (m.vx, m.vy, m.spin) = (0.0, 0.0, 0.0);
+                self.antics.drawn = true;
+                if demo == Demo::Chute {
+                    self.antics.chute = Some(Chute::Open(now, 0.0));
+                }
+            }
+            Demo::Slide => {
+                let screen = os::screen_at(at).map_or(self.screen, |(screen, _)| screen);
+                m.vx = if at.x > screen.center().x { -1500.0 } else { 1500.0 };
+            }
+            Demo::Hello => m.tip = Some((if cfg!(target_os = "macos") && !crate::access::allowed() { Said::Dock } else { Said::Hi }, now)),
+            Demo::Advice => m.advise(),
+            Demo::Say(own) => m.tip = Some((Said::Own(own), now)),
+        }
+    }
+
+    /// Asks your name: his bubble with the field to type it in.
+    fn ask_name(&mut self) {
+        self.matheo.tip = Some((Said::Own(Own::AskName), Instant::now()));
+        self.naming = Some(Naming { typed: self.settings.name.clone().unwrap_or_default(), keys: None, rects: None });
+    }
+
+    /// Your name typed (kept, he's glad), or skipped (kept empty: not asked again, his menu asks).
+    fn named(&mut self, name: Option<String>) {
+        let name = name.map(|n| n.trim().to_owned()).filter(|n| !n.is_empty());
+        self.matheo.tip = name.is_some().then(|| (Said::Own(Own::Named), Instant::now()));
+        self.settings.name = Some(name.unwrap_or_default());
+        self.settings.save();
+        if self.naming.take().is_some_and(|n| n.keys.is_some()) {
+            release_keys();
+        }
+    }
+
+    /// Keys typed in his name bubble: letters added, Backspace takes the last off, Enter keeps it,
+    /// Escape skips.
+    fn type_name(&mut self, events: &[egui::Event]) {
+        for event in events {
+            let Some(n) = &mut self.naming else { return };
+            match event {
+                egui::Event::Text(text) => {
+                    for c in text.chars().filter(|c| !c.is_control()) {
+                        if n.typed.chars().count() < 24 {
+                            n.typed.push(c);
+                        }
+                    }
+                }
+                egui::Event::Key { key: egui::Key::Backspace, pressed: true, .. } => {
+                    n.typed.pop();
+                }
+                egui::Event::Key { key: egui::Key::Enter, pressed: true, .. } => {
+                    let typed = n.typed.clone();
+                    self.named(Some(typed));
+                }
+                egui::Event::Key { key: egui::Key::Escape, pressed: true, .. } => self.named(None),
+                _ => {}
+            }
+        }
+    }
+
     /// A choice in his menu.
     fn choose(&mut self, choice: Choice) {
         match choice {
@@ -316,6 +486,15 @@ impl Overlay {
                 self.matheo.tip = Some((Said::Checking, Instant::now()));
             }
             Choice::Dock => crate::access::ask(),
+            Choice::Hours => self.page = Page::Hours,
+            Choice::Demo => self.page = Page::Demo,
+            Choice::Back => self.page = Page::Main,
+            Choice::Name => self.ask_name(),
+            Choice::Play(demo) => self.play(demo),
+            Choice::HoursOn => self.settings.hours.on = !self.settings.hours.on,
+            // Moved by the click's place in its row (see where the menu is clicked).
+            Choice::Hour(_) => {}
+            Choice::HoursReset => self.settings.hours = crate::settings::Hours::default(),
             Choice::Quit => {
                 if let Some(at) = self.matheo.at {
                     matheo_save(at);
@@ -420,6 +599,32 @@ impl eframe::App for Overlay {
             }
             _ => {}
         }
+        // Asking your name: his bubble stays while it does; a click on « That's me! » keeps it, on
+        // « Skip » leaves it, elsewhere on the bubble takes the keys to type it.
+        let asking = matches!(self.matheo.tip, Some((Said::Own(Own::AskName), _)));
+        if asking && self.naming.is_none() {
+            self.naming = Some(Naming { typed: String::new(), keys: None, rects: None });
+        }
+        if !asking && self.naming.take().is_some_and(|n| n.keys.is_some()) {
+            release_keys();
+        }
+        let mut on_name = false;
+        if let (Some(naming), Some(p)) = (&mut self.naming, mouse.at) {
+            self.matheo.tip = Some((Said::Own(Own::AskName), Instant::now()));
+            if let Some([bubble, _, ok, skip]) = naming.rects
+                && bubble.contains(p)
+            {
+                on_name = true;
+                if pressed && ok.contains(p) {
+                    let typed = naming.typed.clone();
+                    self.named(Some(typed));
+                } else if pressed && skip.contains(p) {
+                    self.named(None);
+                } else if pressed {
+                    naming.keys = Some(0);
+                }
+            }
+        }
         if pressed
             && matches!(self.matheo.tip, Some((Said::Update, _)))
             && self.matheo.bubble.zip(mouse.at).is_some_and(|(r, p)| r.contains(p))
@@ -429,18 +634,34 @@ impl eframe::App for Overlay {
         }
         // His menu: a click on a row does it, a click anywhere else closes it.
         let quiet = self.matheo.quiet.is_some_and(|until| unix_now() < until);
-        let rows = menu_rows(&self.settings, quiet);
+        let rows = menu_rows(&self.settings, quiet, self.page);
         let menu = self.menu.map(|at| menu_rect(at, rows.len(), screen_of(at)));
         let on_menu = menu.zip(mouse.at).is_some_and(|(r, p)| r.contains(p));
         let hover = menu.zip(mouse.at).filter(|(r, p)| r.contains(*p)).map(|(r, p)| (((p.y - r.min.y - 6.0) / ROW_H).floor().max(0.0) as usize).min(rows.len() - 1));
-        let mut click = pressed;
+        // A click on the name bubble is its own (not his: the bubble would close).
+        let mut click = pressed && !on_name;
         if pressed && let Some(menu) = menu {
             click = false;
-            self.menu = None;
+            let at = self.menu.take();
             if menu.contains(mouse.at.unwrap_or(Pos2::ZERO))
                 && let Some(i) = hover
             {
-                self.choose(rows[i].2);
+                let choice = rows[i].2;
+                // A time reminder: its − or + moves it.
+                if let (Choice::Hour(k), Some(p)) = (choice, mouse.at) {
+                    let x = menu.max.x - 6.0 - p.x;
+                    let step = crate::settings::Hours::STEP;
+                    if (HOUR_PLUS - 26.0..=HOUR_PLUS).contains(&x) {
+                        self.settings.hours.shift(k, step);
+                    } else if (HOUR_MINUS - 26.0..=HOUR_MINUS).contains(&x) {
+                        self.settings.hours.shift(k, -step);
+                    }
+                }
+                self.choose(choice);
+                // His time reminders' page stays open.
+                if matches!(choice, Choice::Hours | Choice::Demo | Choice::Back | Choice::HoursOn | Choice::Hour(_) | Choice::HoursReset) {
+                    self.menu = at;
+                }
             }
         }
         let mut open_menu = None;
@@ -456,18 +677,43 @@ impl eframe::App for Overlay {
         }
         if let Some(at) = open_menu {
             self.menu = Some(at);
+            self.page = Page::Main;
+        }
+        if let Some(at) = self.matheo.at {
+            let floor = matheo_floor(at, &grounds, dock).1;
+            if self.antics.step(&mut self.matheo, floor, dt) {
+                plant_busy = true;
+            }
         }
         if self.matheo.tired.1.is_none_or(|t| t.elapsed() >= Duration::from_secs(60)) {
             self.matheo.tired = (late(), Some(Instant::now()));
             self.matheo.friday = friday();
             self.season = Season::now();
         }
+        self.care.step(&mut self.matheo, self.settings.tips, self.settings.hours, self.settings.name.is_some(), mouse.at);
         let m = &self.matheo;
-        let look = m.look(m.tired.0, m.friday);
+        let look = self.antics.dress(m.look(m.tired.0, m.friday), m);
         let can = m.at.zip(m.can).map(|(at, (since, pour))| can_view(at, can_side(at, &works), since, pour));
         let plant = m.at.map(|at| (at, look));
         let season = self.season;
-        let tip = m.tip.map(|(said, _)| said.text(self.settings.lang));
+        let antics = &self.antics;
+        let mut keys = Vec::new();
+        let naming = self.naming.as_ref().map(|n| Naming { typed: n.typed.clone(), keys: n.keys, rects: None });
+        let t = self.settings.lang.strings();
+        // His words: one of a few at each bubble, with your name now and then.
+        let v = self.care.variant(m.tip.map(|(_, since)| since));
+        let tip = m.tip.map(|(said, since)| {
+            let text = match said {
+                Said::Own(Own::Breathe) => breathe_text(since.elapsed().as_secs_f32(), t, v),
+                Said::Own(own) => own.text(t, v).to_owned(),
+                Said::Ouch => pick(t.more_ouch, v).to_owned(),
+                Said::Shaking => pick(t.more_shaking, v).to_owned(),
+                Said::Thanks => pick(t.more_thanks, v).to_owned(),
+                Said::Thirsty => pick(t.more_thirsty, v).to_owned(),
+                _ => said.text(self.settings.lang).to_owned(),
+            };
+            personal(said, &text, self.settings.name.as_deref(), t)
+        });
 
         let mut busy = plant_busy;
         let mut next: f32 = 1.0;
@@ -521,7 +767,15 @@ impl eframe::App for Overlay {
                 .with_resizable(false)
                 .with_position(screen.min)
                 .with_inner_size(screen.size());
-            let bubble = ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("matheo-screen", i)), builder, |ctx, _| {
+            // Typing your name: the keys taken by this window, a few frames (see `take_keys`).
+            let keys_here = his && naming.as_ref().and_then(|n| n.keys).is_some_and(|k| k < 3);
+            if keys_here {
+                take_keys(&title);
+            }
+            let (bubble, name_rects, typed_keys) = ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("matheo-screen", i)), builder, |ctx, _| {
+                if keys_here {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
                 // Windows places a new window with the scale of the screen it was made on: put over
                 // its screen in that screen's pixels (see `crate::place`).
                 #[cfg(windows)]
@@ -530,15 +784,28 @@ impl eframe::App for Overlay {
                 let origin = window_origin(ctx, screen.min);
                 let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("matheo")));
                 let mut bubble = None;
+                let mut name_rects = None;
+                let mut typed_keys = Vec::new();
                 if let (Some((at, look)), true) = (plant, his) {
+                    paint_antics_behind(&painter, antics, at - origin.to_vec2(), MATHEO_H, look, origin.to_vec2());
                     paint_matheo_as(&painter, at - origin.to_vec2(), MATHEO_H, now, look);
                     if let Some(season) = season {
                         paint_season(&painter, at - origin.to_vec2(), MATHEO_H, now, look, season);
                     }
+                    paint_antics_front(&painter, antics, MATHEO_H, origin.to_vec2());
                     if let Some(can) = can {
                         paint_can(&painter, can, origin.to_vec2());
                     }
-                    bubble = tip.map(|text| paint_matheo_tip(&painter, at - origin.to_vec2(), text, screen.translate(-origin.to_vec2())).translate(origin.to_vec2()));
+                    if let (Some(n), Some(text)) = (naming.as_ref(), tip.as_deref()) {
+                        let rects = paint_name_bubble(&painter, at - origin.to_vec2(), text, &n.typed, n.keys.is_some(), now, t, screen.translate(-origin.to_vec2())).map(|r| r.translate(origin.to_vec2()));
+                        bubble = Some(rects[0]);
+                        name_rects = Some(rects);
+                        if n.keys.is_some() {
+                            typed_keys = ctx.input(|i| i.events.clone());
+                        }
+                    } else {
+                        bubble = tip.as_deref().map(|text| paint_matheo_tip(&painter, at - origin.to_vec2(), text, screen.translate(-origin.to_vec2())).translate(origin.to_vec2()));
+                    }
                 }
                 // His menu above his bubble.
                 if let Some(menu) = menu_here {
@@ -547,16 +814,35 @@ impl eframe::App for Overlay {
                 if gallery && i == home {
                     paint_matheo_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                     paint_season_gallery(&painter, screen.translate(-origin.to_vec2()), now);
+                    paint_antics_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                 }
-                bubble
+                (bubble, name_rects, typed_keys)
             });
             if bubble.is_some() {
                 self.matheo.bubble = bubble;
             }
+            if let Some(n) = &mut self.naming {
+                if his && name_rects.is_some() {
+                    n.rects = name_rects;
+                }
+                if let Some(k) = &mut n.keys
+                    && his
+                {
+                    *k = k.saturating_add(1);
+                }
+            }
+            keys.extend(typed_keys);
             if his {
                 // His leaves sway gently (what floats around him in season, smoothly).
                 next = next.min(if season.is_some() { 0.04 } else { 0.1 });
             }
+        }
+        if self.naming.as_ref().is_some_and(|n| n.keys.is_some()) {
+            // The cursor blinking.
+            next = next.min(0.25);
+        }
+        if !keys.is_empty() {
+            self.type_name(&keys);
         }
         // Screens gone: their windows with them.
         self.others.retain(|i, _| *i < screens.len());
@@ -578,7 +864,46 @@ impl eframe::App for Overlay {
     }
 }
 
+/// Your name being typed in his bubble: what so far, the keys taken (frames since, to take them a
+/// few times), his bubble's parts as last drawn (the bubble, the field, « That's me! », « Skip »).
+struct Naming {
+    typed: String,
+    keys: Option<u32>,
+    rects: Option<[Rect; 4]>,
+}
+
+/// Typing his name: his app in front and the window `title` (over his screen) taking the keys. On
+/// macOS his app has no Dock icon nor menu bar, and his windows never take the keys by themselves.
+fn take_keys(title: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        let Some(mtm) = objc2::MainThreadMarker::new() else { return };
+        let app = objc2_app_kit::NSApplication::sharedApplication(mtm);
+        #[allow(deprecated)]
+        app.activateIgnoringOtherApps(true);
+        for window in app.windows().iter() {
+            if window.title().to_string() == title {
+                window.makeKeyAndOrderFront(None);
+            }
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = title;
+}
+
+/// Done typing: the keys back to the app that had them.
+fn release_keys() {
+    #[cfg(target_os = "macos")]
+    if let Some(mtm) = objc2::MainThreadMarker::new() {
+        objc2_app_kit::NSApplication::sharedApplication(mtm).deactivate();
+    }
+}
+
+//@CARE@
+
 //@SEASON@
+
+//@ANTICS@
 
 //@OS@
 
