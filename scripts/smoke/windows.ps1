@@ -40,7 +40,14 @@ function Foot {
     return @([int][double]$m.Matches[0].Groups[1].Value, [int][double]$m.Matches[0].Groups[2].Value)
 }
 
-function Move([int]$x, [int]$y) { [Input]::SetCursorPos($x, $y) | Out-Null }
+# The pointer moved as a mouse would (SetCursorPos doesn't move it on the runner): absolute, in
+# 0..65535 over the primary screen.
+function Move([int]$x, [int]$y) {
+    $s = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $nx = [uint32][math]::Round($x * 65535 / ($s.Width - 1))
+    $ny = [uint32][math]::Round($y * 65535 / ($s.Height - 1))
+    [Input]::mouse_event(0x8001, $nx, $ny, 0, [UIntPtr]::Zero)
+}
 
 # What the system says of the pointer (to know whether the moves and clicks reach it).
 function Pointer([string]$when) {

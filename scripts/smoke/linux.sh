@@ -40,6 +40,15 @@ pid=$!
 sleep 10
 shot 01-started
 kill -0 "$pid" 2>/dev/null || echo "Mathéo exited: $(wait "$pid"; echo $?)"
+# His windows as X sees them: mapped or not, where, their depth (32: with alpha), their properties.
+xwininfo -root -tree >"$out/x-tree.txt" 2>&1
+for id in $(grep -i 'math' "$out/x-tree.txt" | awk '{print $1}'); do
+	{
+		echo "=== $id"
+		xwininfo -id "$id"
+		xprop -id "$id"
+	} >>"$out/x-windows.txt" 2>&1
+done
 
 if read -r x y < <(foot); then
 	echo "foot: $x $y"
@@ -88,4 +97,13 @@ shot 07-gallery
 kill "$pid" 2>/dev/null
 sleep 1
 [ -n "$log" ] && cp "$log" "$out/matheo-gallery.log"
+
+# The same through OpenGL instead of Vulkan.
+WGPU_BACKEND=gl MATHEO_GALLERY=1 "$exe" >"$out/stderr-gl.log" 2>&1 &
+pid=$!
+sleep 8
+shot 08-gallery-gl
+kill "$pid" 2>/dev/null
+sleep 1
+[ -n "$log" ] && cp "$log" "$out/matheo-gl.log"
 exit 0
