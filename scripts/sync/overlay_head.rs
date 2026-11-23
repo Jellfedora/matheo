@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use egui::{Color32, FontId, Pos2, Rect, Stroke, Ui, Vec2};
 
-use crate::settings::Settings;
+use crate::settings::{Settings, Skin};
 
 /// The pointer as last read: where (in points, the screens' space), the main button down, the
 /// right one.
@@ -70,6 +70,17 @@ struct Overlay {
     glass: u8,
     /// Where his eyes look (see `Look::gaze`), going smoothly towards the pointer near him.
     gaze: Vec2,
+    /// Changing plant: the one before, and since when (see `swap_at`).
+    swap: Option<(Skin, Instant)>,
+    /// The watering can waiting beside him (kept until used): the one already counted as left
+    /// unused (him thirstier), and whether it went away while he was moved (it hops in again
+    /// beside him once he's down).
+    can_counted: Option<Instant>,
+    can_away: bool,
+    /// His entrance at the start done (see `Entrance`); popping out of the bottom of the screen
+    /// since when.
+    entered: bool,
+    pop: Option<Instant>,
 }
 
 /// How near the pointer comes for his eyes to follow it (points from his face).
@@ -106,6 +117,9 @@ enum Choice {
     /// One of his time reminders: a click on its − or + moves it.
     Hour(usize),
     HoursReset,
+    /// The page of the plants he can be, and one of them.
+    Skins,
+    Skin(Skin),
 }
 
 /// Debug builds, for the smoke test (scripts/smoke/): the pointer read from the file
@@ -135,6 +149,8 @@ fn clear_glass() {
 }
 
 const MENU_W: f32 = 240.0;
+/// The page of his plants, beside him: that far from his middle (points).
+const SKINS_AWAY: f32 = 60.0;
 /// A time reminder's row: its − and + buttons, from the menu's right edge (their left side).
 const HOUR_MINUS: f32 = 108.0;
 const HOUR_PLUS: f32 = 32.0;
@@ -150,6 +166,11 @@ fn menu_rows(settings: &Settings, quiet: bool, page: Page) -> Vec<(String, Optio
         rows.extend(DEMOS.iter().map(|(label, demo)| ((*label).to_owned(), None, Choice::Play(*demo))));
         return rows;
     }
+    if page == Page::Skins {
+        let mut rows = vec![(t.menu_back.to_owned(), None, Choice::Back)];
+        rows.extend(Skin::ALL.iter().map(|&s| (s.label(settings.lang), Some(settings.skin == s), Choice::Skin(s))));
+        return rows;
+    }
     if page == Page::Hours {
         let h = settings.hours;
         let names = [t.menu_hour_morning, t.menu_hour_lunch, t.menu_hour_afternoon, t.menu_hour_home];
@@ -158,11 +179,14 @@ fn menu_rows(settings: &Settings, quiet: bool, page: Page) -> Vec<(String, Optio
         rows.push((t.menu_hours_reset.to_owned(), None, Choice::HoursReset));
         return rows;
     }
+    // In groups (a line between them, see `starts_group`): him and you, his advice, the computer,
+    // the app, quitting.
     let mut rows = vec![
         (t.menu_version.replace("{v}", crate::update::VERSION), None, Choice::Version),
+        (t.menu_skin.to_owned(), None, Choice::Skins),
+        (t.menu_name.to_owned(), None, Choice::Name),
         (t.menu_tips_on.to_owned(), Some(settings.tips), Choice::Tips),
         (t.menu_hours.to_owned(), None, Choice::Hours),
-        (t.menu_name.to_owned(), None, Choice::Name),
         ((if quiet { t.menu_speak } else { t.menu_quiet }).to_owned(), None, Choice::Quiet),
         (t.menu_autostart.to_owned(), Some(settings.autostart), Choice::Autostart),
         (t.menu_lang.to_owned(), None, Choice::Lang),
@@ -184,12 +208,32 @@ fn menu_rows(settings: &Settings, quiet: bool, page: Page) -> Vec<(String, Optio
     rows
 }
 
+#[cfg(test)]
+mod menu_tests {
+    use super::{Choice, starts_group};
+
+    #[test]
+    fn his_menu_goes_in_groups() {
+        let rows: Vec<(String, Option<bool>, Choice)> = [Choice::Version, Choice::Skins, Choice::Name, Choice::Tips, Choice::Hours, Choice::Quiet, Choice::Autostart, Choice::Lang, Choice::Dock, Choice::Check, Choice::Page, Choice::Journal, Choice::Quit]
+            .into_iter()
+            .map(|c| (String::new(), None, c))
+            .collect();
+        let lines: Vec<Choice> = (0..rows.len()).filter(|&i| starts_group(&rows, i)).map(|i| rows[i].2).collect();
+        assert_eq!(lines, [Choice::Tips, Choice::Autostart, Choice::Check, Choice::Quit]);
+        // Without the Dock's row: the app right after the language.
+        let rows: Vec<_> = rows.into_iter().filter(|r| r.2 != Choice::Dock).collect();
+        assert!(starts_group(&rows, rows.iter().position(|r| r.2 == Choice::Check).unwrap()));
+    }
+}
+
 /// His menu's pages.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Page {
     Main,
     /// His time reminders.
     Hours,
+    /// The plants he can be.
+    Skins,
     /// Debug builds: each of his antics and words at a click.
     Demo,
 }
@@ -207,16 +251,20 @@ enum Demo {
     Hello,
     /// His advice (the watering can with water).
     Advice,
+    /// Popping out of the bottom of the screen, as he may arrive at the start.
+    Pop,
     Say(Own),
 }
 
-const DEMOS: [(&str, Demo); 19] = [
+const DEMOS: [(&str, Demo); 21] = [
     ("Parachute", Demo::Chute),
+    ("Arrivée par le bas", Demo::Pop),
     ("Chute et atterrissage", Demo::Land),
     ("Glissade", Demo::Slide),
     ("Présentation (1er lancement)", Demo::Hello),
     ("Demande du prénom", Demo::Say(Own::AskName)),
     ("Prénom retenu", Demo::Say(Own::Named)),
+    ("Nouveautés de la version", Demo::Say(Own::News)),
     ("Un conseil", Demo::Advice),
     ("Pause du matin", Demo::Say(Own::Clock(0))),
     ("Repas", Demo::Say(Own::Clock(1))),
@@ -241,7 +289,16 @@ fn menu_rect(at: Pos2, rows: usize, screen: Rect) -> Rect {
     Rect::from_min_size(min, size)
 }
 
-/// His menu: a light card, the row under the pointer lit, switches on the right.
+/// Whether row `i` of his main menu starts a group (a thin line over it): his advice, the computer,
+/// the app (after the language, or the Dock), quitting.
+fn starts_group(rows: &[(String, Option<bool>, Choice)], i: usize) -> bool {
+    let Some((_, _, choice)) = rows.get(i) else { return false };
+    let after = i.checked_sub(1).and_then(|k| rows.get(k)).map(|r| r.2);
+    matches!(choice, Choice::Tips | Choice::Autostart | Choice::Quit) || (matches!(after, Some(Choice::Lang | Choice::Dock)) && *choice != Choice::Dock)
+}
+
+/// His menu: a light card, the row under the pointer lit, switches on the right, a thin line
+/// between its groups.
 fn paint_menu(painter: &egui::Painter, rect: Rect, rows: &[(String, Option<bool>, Choice)], hover: Option<usize>) {
     let ink = Color32::from_rgb(46, 64, 36);
     let green = Color32::from_rgb(76, 160, 70);
@@ -249,6 +306,9 @@ fn paint_menu(painter: &egui::Painter, rect: Rect, rows: &[(String, Option<bool>
     painter.rect(rect, 12.0, Color32::from_rgb(250, 248, 234), Stroke::new(1.5, Color32::from_rgb(104, 156, 84)), egui::StrokeKind::Inside);
     for (i, (label, switch, choice)) in rows.iter().enumerate() {
         let row = Rect::from_min_size(rect.min + Vec2::new(6.0, 6.0 + i as f32 * ROW_H), Vec2::new(rect.width() - 12.0, ROW_H));
+        if starts_group(rows, i) {
+            painter.line_segment([row.left_top() + Vec2::new(10.0, 0.0), row.right_top() - Vec2::new(10.0, 0.0)], Stroke::new(1.0, Color32::from_rgb(214, 222, 198)));
+        }
         if hover == Some(i) && *choice != Choice::Version {
             painter.rect_filled(row, 8.0, Color32::from_rgb(222, 238, 206));
         }
@@ -280,7 +340,7 @@ fn paint_menu(painter: &egui::Painter, rect: Rect, rows: &[(String, Option<bool>
     }
 }
 
-pub(crate) fn run(settings: Settings) {
+pub(crate) fn run(mut settings: Settings) {
     // Without a compositor, the transparent window would hide the screen in black: nothing then.
     #[cfg(all(unix, not(target_os = "macos")))]
     if !os::composited() {
@@ -351,6 +411,13 @@ pub(crate) fn run(settings: Settings) {
         options.wgpu_options.wgpu_setup = setup.into();
     }
     let first = !matheo_file().is_some_and(|f| f.exists());
+    // A new version (not his very first start): he tells what's new in it. Debug builds:
+    // `MATHEO_NEWS=1` to see it.
+    let news = (!first && settings.seen.as_deref() != Some(crate::update::VERSION)) || (cfg!(debug_assertions) && std::env::var_os("MATHEO_NEWS").is_some());
+    if settings.seen.as_deref() != Some(crate::update::VERSION) {
+        settings.seen = Some(crate::update::VERSION.to_owned());
+        settings.save();
+    }
     crate::log::line(&format!("écrans {:?}, souris {:?}, fenêtre sur {start:?}", os::screens(), os::mouse().at));
     let result = eframe::run_native(
         "matheo",
@@ -376,7 +443,7 @@ pub(crate) fn run(settings: Settings) {
                     crate::access::ask();
                 }
             }
-            Ok(Box::new(Overlay { mouse, hot: hot.clone(), settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), antics: Antics::default(), care: Care::new(first), page: Page::Main, naming: None, logged: String::new(), glass: GLASS, gaze: Vec2::ZERO }))
+            Ok(Box::new(Overlay { mouse, hot: hot.clone(), settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), antics: Antics::default(), care: Care::new(first, news), page: Page::Main, naming: None, logged: String::new(), glass: GLASS, gaze: Vec2::ZERO, swap: None, can_counted: None, can_away: false, entered: false, pop: None }))
         }),
     );
     match result {
@@ -407,6 +474,7 @@ impl Overlay {
             }
             Demo::Hello => m.tip = Some((if cfg!(target_os = "macos") && !crate::access::allowed() { Said::Dock } else { Said::Hi }, now)),
             Demo::Advice => m.advise(),
+            Demo::Pop => self.pop = Some(now),
             Demo::Say(own) => m.tip = Some((Said::Own(own), now)),
         }
     }
@@ -509,6 +577,23 @@ impl Overlay {
             // Moved by the click's place in its row (see where the menu is clicked).
             Choice::Hour(_) => {}
             Choice::HoursReset => self.settings.hours = crate::settings::Hours::default(),
+            Choice::Skins => {
+                self.page = Page::Skins;
+                // Beside him, not over him: his change seen.
+                if let Some(foot) = self.matheo.at {
+                    let screen = os::screen_at(foot).map_or(self.screen, |(screen, _)| screen);
+                    let x = if foot.x - SKINS_AWAY - MENU_W > screen.min.x { foot.x - SKINS_AWAY - MENU_W / 2.0 } else { foot.x + SKINS_AWAY + MENU_W / 2.0 };
+                    self.menu = Some(Pos2::new(x, foot.y + 8.0));
+                }
+            }
+            Choice::Skin(skin) => {
+                if skin != self.settings.skin {
+                    self.swap = Some((self.settings.skin, Instant::now()));
+                    // Nothing over him while he changes: his bubble closed.
+                    self.matheo.tip = None;
+                }
+                self.settings.skin = skin;
+            }
             Choice::Quit => {
                 if let Some(at) = self.matheo.at {
                     matheo_save(at);
@@ -673,8 +758,8 @@ impl eframe::App for Overlay {
                 }
                 self.choose(choice);
                 // His time reminders' page stays open.
-                if matches!(choice, Choice::Hours | Choice::Demo | Choice::Back | Choice::HoursOn | Choice::Hour(_) | Choice::HoursReset) {
-                    self.menu = at;
+                if matches!(choice, Choice::Hours | Choice::Demo | Choice::Back | Choice::HoursOn | Choice::Hour(_) | Choice::HoursReset | Choice::Skins | Choice::Skin(_)) {
+                    self.menu = self.menu.or(at);
                 }
             }
         }
@@ -716,9 +801,66 @@ impl eframe::App for Overlay {
         } else {
             self.gaze = to;
         }
+        // His entrance, at the start: under his parachute or popping out of the bottom of the screen.
+        if !self.entered && self.matheo.at.is_some() {
+            self.entered = true;
+            match Entrance::now() {
+                Entrance::Chute => self.play(Demo::Chute),
+                Entrance::Pop => self.pop = Some(Instant::now()),
+            }
+        }
+        // Popping out: under the screen's bottom first (how far: `rise`, points), then hopping.
+        let mut rise = 0.0;
+        let mut pop_look = None;
+        if let (Some(since), Some(at)) = (self.pop, self.matheo.at) {
+            let depth = os::screen_at(at).map_or(self.screen.max.y, |(screen, _)| screen.max.y) - at.y + MATHEO_H * 1.6;
+            match pop_at(since.elapsed().as_secs_f32(), depth) {
+                Some((below, hop, squash)) => {
+                    rise = below;
+                    pop_look = Some((hop, squash));
+                    plant_busy = true;
+                }
+                None => self.pop = None,
+            }
+        }
+        // His can, waiting: away while he's held or flying, hopping in again beside him once down.
+        if let Some((since, None)) = self.matheo.can {
+            if self.matheo.grab.is_some() || self.antics.air {
+                self.can_away = true;
+            } else if self.can_away {
+                self.can_away = false;
+                let now = Instant::now();
+                if self.can_counted == Some(since) {
+                    self.can_counted = Some(now);
+                }
+                self.matheo.can = Some((now, None));
+                plant_busy = true;
+            }
+        } else {
+            self.can_away = false;
+        }
         let m = &self.matheo;
-        let look = Look { gaze: self.gaze, ..self.antics.dress(m.look(m.tired.0, m.friday), m) };
-        let can = m.at.zip(m.can).map(|(at, (since, pour))| can_view(at, can_side(at, &works), since, pour));
+        let mut look = Look { gaze: self.gaze, skin: self.settings.skin, ..self.antics.dress(m.look(m.tired.0, m.friday), m) };
+        // Changing plant: the one before sinking into the soil, the new one popping out.
+        if let Some((before, since)) = self.swap {
+            let t = since.elapsed().as_secs_f32();
+            match swap_at(t) {
+                Some((old, sink)) => {
+                    look.sink = sink;
+                    if old {
+                        look.skin = before;
+                    }
+                    plant_busy = true;
+                }
+                None => self.swap = None,
+            }
+        }
+        if let Some((hop, squash)) = pop_look {
+            look.hop += hop;
+            look.squash = squash;
+        }
+        let swapping = self.swap.map(|(_, since)| since.elapsed().as_secs_f32());
+        let can = m.at.zip(m.can).filter(|_| !self.can_away).map(|(at, (since, pour))| can_view(at, can_side(at, &works), since, pour));
         let plant = m.at.map(|at| (at, look));
         let season = self.season;
         let antics = &self.antics;
@@ -726,7 +868,7 @@ impl eframe::App for Overlay {
         let naming = self.naming.as_ref().map(|n| Naming { typed: n.typed.clone(), keys: n.keys, rects: None });
         let t = self.settings.lang.strings();
         // His words: one of a few at each bubble, with your name now and then.
-        let v = self.care.variant(m.tip.map(|(_, since)| since));
+        let v = self.care.variant(m.tip);
         let tip = m.tip.map(|(said, since)| {
             let text = match said {
                 Said::Own(Own::Breathe) => breathe_text(since.elapsed().as_secs_f32(), t, v),
@@ -737,7 +879,8 @@ impl eframe::App for Overlay {
                 Said::Thirsty => pick(t.more_thirsty, v).to_owned(),
                 _ => said.text(self.settings.lang).to_owned(),
             };
-            personal(said, &text, self.settings.name.as_deref(), t)
+            // In the feminine in Paloma's skin.
+            self.settings.skin.says(&personal(said, &text, self.settings.name.as_deref(), t))
         });
 
         let mut busy = plant_busy;
@@ -812,8 +955,13 @@ impl eframe::App for Overlay {
                 let mut name_rects = None;
                 let mut typed_keys = Vec::new();
                 if let (Some((at, look)), true) = (plant, his) {
+                    // Popping out of the bottom of the screen: drawn lower (where he is stays).
+                    let at = at + Vec2::new(0.0, rise);
                     paint_antics_behind(&painter, antics, at - origin.to_vec2(), MATHEO_H, look, origin.to_vec2());
                     paint_matheo_as(&painter, at - origin.to_vec2(), MATHEO_H, now, look);
+                    if let Some(t) = swapping {
+                        paint_swap_dirt(&painter, at - origin.to_vec2(), MATHEO_H, look, t);
+                    }
                     if let Some(season) = season {
                         paint_season(&painter, at - origin.to_vec2(), MATHEO_H, now, look, season);
                     }
@@ -839,6 +987,7 @@ impl eframe::App for Overlay {
                 if gallery && i == home {
                     paint_matheo_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                     paint_season_gallery(&painter, screen.translate(-origin.to_vec2()), now);
+                    paint_skin_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                     paint_antics_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                 }
                 (bubble, name_rects, typed_keys)
@@ -945,6 +1094,8 @@ fn release_keys() {
 //@CARE@
 
 //@SEASON@
+
+//@SKINS@
 
 //@ANTICS@
 

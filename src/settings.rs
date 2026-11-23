@@ -16,6 +16,11 @@ pub(crate) struct Settings {
     pub hours: Hours,
     /// What he calls you (asked once, changed from his menu).
     pub name: Option<String>,
+    /// His skin (chosen from his menu): the green plant, Paloma the cactus, Hélio the sunflower. He's
+    /// still Mathéo: their names are only the skins'.
+    pub skin: Skin,
+    /// The version he last started as: another one, he tells what's new in it.
+    pub seen: Option<String>,
     /// Never started yet (no file): he then starts with the computer.
     #[serde(skip)]
     pub first: bool,
@@ -23,7 +28,46 @@ pub(crate) struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { tips: true, lang: Lang::from_system(), autostart: false, hours: Hours::default(), name: None, first: false }
+        Self { tips: true, lang: Lang::from_system(), autostart: false, hours: Hours::default(), name: None, skin: Skin::default(), seen: None, first: false }
+    }
+}
+
+/// His skin: each has its name (only the skin's: he's still Mathéo).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Skin {
+    /// Mathéo, the green plant with his big leaves.
+    #[default]
+    Classic,
+    /// Paloma, a cactus with two arms, a pink flower on top on a day well watered.
+    Cactus,
+    /// Hélio, a sunflower turning his head to the pointer.
+    Sunflower,
+}
+
+impl Skin {
+    pub const ALL: [Skin; 3] = [Skin::Classic, Skin::Cactus, Skin::Sunflower];
+
+    /// The skin's name, in his menu.
+    pub fn name(self) -> &'static str {
+        match self {
+            Skin::Classic => "Mathéo",
+            Skin::Cactus => "Paloma",
+            Skin::Sunflower => "Hélio",
+        }
+    }
+
+    /// What he is, in his menu.
+    pub fn label(self, lang: Lang) -> String {
+        let what = match (self, lang) {
+            (Skin::Classic, Lang::Fr) => "la plante verte",
+            (Skin::Classic, Lang::En) => "the green plant",
+            (Skin::Cactus, Lang::Fr) => "le cactus",
+            (Skin::Cactus, Lang::En) => "the cactus",
+            (Skin::Sunflower, Lang::Fr) => "le tournesol",
+            (Skin::Sunflower, Lang::En) => "the sunflower",
+        };
+        format!("{}, {what}", self.name())
     }
 }
 

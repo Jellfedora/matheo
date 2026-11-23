@@ -21,6 +21,8 @@ enum Own {
     Named,
     /// After an update, your name not known: hello again (then he asks it).
     Again,
+    /// The first start of a new version: what's new in it (in place of hello again).
+    News,
 }
 
 impl Own {
@@ -41,6 +43,7 @@ impl Own {
             Own::AskName => std::slice::from_ref(&t.matheo_ask_name),
             Own::Named => t.matheo_named,
             Own::Again => t.matheo_again,
+            Own::News => t.matheo_news,
         }
     }
 
@@ -53,6 +56,7 @@ impl Own {
         match self {
             Own::Back | Own::Named => Duration::from_secs(6),
             Own::Again => Duration::from_secs(8),
+            Own::News => Duration::from_secs(15),
             Own::AskName => Duration::from_secs(60),
             Own::Breathe => BREATHE_LASTS,
             _ => TIP_SHOWN,
@@ -125,27 +129,37 @@ struct Care {
     /// His very first start (his hello first), else hello again before asking.
     first: bool,
     /// The bubble showing (since when) and which of its words.
-    variant: (Option<Instant>, usize),
+    variant: (Option<(Said, Instant)>, usize),
     seed: u64,
+    /// A new version: what's new in it, said once a little after the start.
+    news: bool,
 }
 
 impl Care {
-    fn new(first: bool) -> Self {
+    fn new(first: bool, news: bool) -> Self {
         let care = if care_forced() { Duration::from_secs(5) } else { CARE_FIRST };
-        Self { said: (None, Vec::new()), next: Instant::now() + care, turn: 0, bubble: Instant::now() - CARE_GAP, seen: (None, std::time::SystemTime::now()), start: Instant::now(), asked: false, first, variant: (None, 0), seed: 0 }
+        Self { said: (None, Vec::new()), next: Instant::now() + care, turn: 0, bubble: Instant::now() - CARE_GAP, seen: (None, std::time::SystemTime::now()), start: Instant::now(), asked: false, first, variant: (None, 0), seed: 0, news }
     }
 
-    /// Which words the bubble shown since `since` says: picked at random once a bubble.
-    fn variant(&mut self, since: Option<Instant>) -> usize {
-        if since != self.variant.0 {
+    /// Which words the bubble `tip` (what, since when) says: picked at random once a bubble. The
+    /// same words said again within a second (shaking him, bumping him: his bubble set again each
+    /// frame) are the same bubble, its words kept (else they changed each frame, flickering).
+    fn variant(&mut self, tip: Option<(Said, Instant)>) -> usize {
+        let same = match (tip, self.variant.0) {
+            (Some((said, since)), Some((was, then))) => said == was && since.saturating_duration_since(then) < Duration::from_secs(1),
+            (None, None) => true,
+            _ => false,
+        };
+        if !same {
             if self.seed == 0 {
                 self.seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(11, |d| d.as_nanos() as u64) | 1;
             }
             self.seed ^= self.seed << 13;
             self.seed ^= self.seed >> 7;
             self.seed ^= self.seed << 17;
-            self.variant = (since, (self.seed >> 16) as usize);
+            self.variant.1 = (self.seed >> 16) as usize;
         }
+        self.variant.0 = tip;
         self.variant.1
     }
 
@@ -162,6 +176,13 @@ impl Care {
         }
         if plant.tip.is_some() {
             self.bubble = moment;
+        }
+        // A new version: what's new in it, first (in place of hello again).
+        if self.news && plant.tip.is_none() && plant.grab.is_none() && self.start.elapsed() >= ASK_NAME_AFTER {
+            self.news = false;
+            self.first = true;
+            plant.tip = Some((Said::Own(Own::News), moment));
+            return;
         }
         // Your name, not known yet (never asked, nor skipped): asked once a start, right after his
         // hello the very first time; after an update, hello again first.
@@ -277,6 +298,22 @@ mod care_tests {
     }
 
     #[test]
+    fn shaking_him_keeps_his_words() {
+        use super::{Care, Said};
+        use std::time::{Duration, Instant};
+        let mut care = Care::new(false, false);
+        let start = Instant::now();
+        let v = care.variant(Some((Said::Shaking, start)));
+        // His bubble set again each frame while shaken: the same words.
+        for k in 1..60 {
+            assert_eq!(care.variant(Some((Said::Shaking, start + Duration::from_millis(16 * k)))), v);
+        }
+        // Another bubble: words picked again (the same ones only by chance).
+        let picks: Vec<usize> = (0..8).map(|k| care.variant(Some((Said::Ouch, start + Duration::from_secs(5 * (k + 1)))))).collect();
+        assert!(picks.windows(2).any(|w| w[0] != w[1]));
+    }
+
+    #[test]
     fn his_hours_are_said_once_on_weekdays() {
         for (k, h) in [10, 12, 16, 18].into_iter().enumerate() {
             assert_eq!(day_due_(at(17, h, 0), &[]), Some(Own::Clock(k)));
@@ -331,7 +368,7 @@ mod care_tests {
         assert_eq!(personal(Said::Tip(4), "Bois.", Some("Julie"), t), "Bois.");
         for lang in crate::i18n::Lang::ALL {
             let t = lang.strings();
-            let all = [Own::Clock(0), Own::Clock(1), Own::Clock(3), Own::Monday, Own::Lamp, Own::Weekend, Own::Eyes, Own::Posture, Own::Breathe, Own::Hot, Own::Back, Own::AskName, Own::Again];
+            let all = [Own::Clock(0), Own::Clock(1), Own::Clock(3), Own::Monday, Own::Lamp, Own::Weekend, Own::Eyes, Own::Posture, Own::Breathe, Own::Hot, Own::Back, Own::AskName, Own::Again, Own::News];
             // (`Named` only with a name.)
             for own in all {
                 assert!(!own.texts(t).is_empty(), "{own:?}");

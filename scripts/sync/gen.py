@@ -2,7 +2,7 @@
 """Builds src/i18n.rs and src/overlay.rs from Ronnie's Mathéo (its src/app/desktop.rs and src/i18n.rs).
 
 Ronnie's repository next to this one (../bipbip), or its path in RONNIE_DIR. Mathéo's own parts (his
-window, his menu, the update) are in overlay_head.rs, his season outfits in season.rs, his antics in antics.rs, his own words and hours in care.rs, next to this script: change them there, then run
+window, his menu, the update) are in overlay_head.rs, his season outfits in season.rs, the other plants he can be in skins.rs, his antics in antics.rs, his own words and hours in care.rs, next to this script: change them there, then run
 `python3 scripts/sync/gen.py` and check with `cargo test` and `cargo clippy`.
 """
 import re
@@ -55,7 +55,7 @@ def value(sec, name):
 
 fr, en = section("pub static FR"), section("pub static EN")
 MENU = {
-    "menu_tips_on": ("Ses conseils", "His advice"),
+    "menu_tips_on": ("Mes conseils", "My advice"),
     "menu_quiet": ("Me taire pendant 6 h", "Keep quiet for 6 hours"),
     "menu_speak": ("Reparler", "Speak again"),
     "menu_autostart": ("Lancer au démarrage", "Start with the computer"),
@@ -72,7 +72,7 @@ MENU = {
                     "Hi there! I’m Mathéo, your new desk plant. I look after you, you water me: deal? To stand on the Dock, allow me in Accessibility (macOS’ window); else I stay just above it. Right-click me for my menu!"),
     "menu_install": ("Installer la version {v}", "Install version {v}"),
     "menu_check": ("Rechercher une mise à jour", "Check for updates"),
-    "menu_journal": ("Son journal (en cas de souci)", "His log (if something's wrong)"),
+    "menu_journal": ("Mon journal (en cas de souci)", "My log (if something's wrong)"),
     "matheo_checking": ("Je regarde s’il y a une nouvelle version de moi…", "Looking for a new version of me…"),
     "matheo_latest": ("Je suis à jour, c’est ma dernière version.", "I’m up to date, this is my latest version."),
     "matheo_unreachable": ("Je n’arrive pas à savoir s’il y a une nouvelle version. Réessaie plus tard.", "I can’t find out whether there’s a new version. Try again later."),
@@ -89,8 +89,9 @@ MENU = {
     "name_ok": ("C’est moi !", "That’s me!"),
     "name_later": ("Passer", "Skip"),
     "menu_hours": ("Mes horaires…", "My hours…"),
+    "menu_skin": ("Mon apparence…", "My look…"),
     "menu_back": ("‹ Retour", "‹ Back"),
-    "menu_hours_on": ("Ses rappels d’horaires", "His time reminders"),
+    "menu_hours_on": ("Mes rappels d’horaires", "My time reminders"),
     "menu_hour_morning": ("Pause du matin", "Morning break"),
     "menu_hour_lunch": ("Repas", "Lunch"),
     "menu_hour_afternoon": ("Pause de l’aprèm", "Afternoon break"),
@@ -114,6 +115,10 @@ V = {
     'matheo_back': (['Te revoilà, {name} ! Tu m’as manqué.', 'Ah, tu es là ! Je t’ai gardé ta place bien au chaud.', 'Coucou ! Je commençais à parler tout seul…', 'Re-bonjour, {name} ! On reprend où on en était ?'], ['There you are, {name}! I missed you.', 'Ah, you’re here! I kept your seat nice and warm.', 'Hi! I was starting to talk to myself…', 'Hello again, {name}! Shall we pick up where we left off?']),
     'matheo_named': (['Enchanté, {name} ! Je retiens, promis. Moi c’est toujours Mathéo, hein.', '{name} ! Quel joli prénom. Je vais le dire souvent, tu verras.'], ['Nice to meet you, {name}! I’ll remember, promise. I’m still Mathéo, by the way.', '{name}! What a lovely name. I’ll say it often, you’ll see.']),
     'matheo_again': (['Coucou, c’est encore moi ! Je me suis fait une petite beauté (nouvelle version), et j’ai appris plein de trucs.', 'Tadaa ! Une nouvelle version de moi, toute fraîche. Et j’ai des surprises pour toi.'], ['Hi, it’s me again! I got a little makeover (new version) and learned lots of new tricks.', 'Ta-da! A brand new version of me. And I have surprises for you.']),
+    # What's new in this version, said once at the first start after the update. Changed at each
+    # release, its words shown to and approved by Julien first.
+    'matheo_news': (['Coucou, c’est moi ! J’ai appris un tour de magie… je peux me transformer en petit cactus ou en tournesol ! Fais un clic droit sur moi, « Mon apparence… », et choisis ma tenue.'],
+                    ['Hi, it’s me! I learned a magic trick… I can turn into a little cactus or a sunflower! Right-click me, “My look…”, and pick my outfit.']),
     'more_ouch': (['Aïe !', 'Ouille, ma tête !', 'Aïeuh ! Doucement…', 'Bonk ! Je vois des étoiles…'], ['Ouch!', 'Ow, my head!', 'Ouchie! Gently…', 'Bonk! I see stars…']),
     'more_shaking': (['Waaaah ! Arrête !', 'Je vais avoir mal au cœur !', 'Pas si fort, j’ai la tête qui tourne !'], ['Waaaah! Stop it!', 'I’m going to be sick!', 'Not so hard, my head’s spinning!']),
     'more_thanks': (['Merci ! Santé ! Ça fait du bien.', 'Ahhh, délicieux ! Merci, {name}.', 'Glou glou glou… Je revis !', 'Merci ! Je sens que je vais pousser d’un coup.'], ['Thanks! Cheers! That feels good.', 'Ahhh, delicious! Thank you, {name}.', 'Glug glug glug… I’m alive again!', 'Thanks! I can feel myself growing.']),
@@ -199,13 +204,34 @@ for gone in ['        ("Salut Gérard", Look { wave: 1.0, ..base }, None),\n', '
 plant = plant.replace("pub(super) fn paint_matheo(", "#[allow(dead_code)]\nfn paint_matheo(")
 # His eyes following the pointer near him (`gaze`, set by the window: see overlay_head.rs).
 for a, b in [
-    ("    wilt: f32,\n}\n", "    wilt: f32,\n    /// Where his eyes look, the pointer near him (his units, 1 at most): towards it.\n    gaze: Vec2,\n}\n"),
-    ("            flower: self.growth.2 >= DAYS_A_FLOWER,\n", "            flower: self.growth.2 >= DAYS_A_FLOWER,\n            gaze: Vec2::ZERO,\n"),
+    ("    wilt: f32,\n}\n", "    wilt: f32,\n    /// Where his eyes look, the pointer near him (his units, 1 at most): towards it.\n    gaze: Vec2,\n    /// Which plant he is (see `skins.rs`).\n    skin: Skin,\n    /// Changing plant: how far down in the soil (0 out, 1 gone; below 0, popping out bigger).\n    sink: f32,\n}\n"),
+    ("            flower: self.growth.2 >= DAYS_A_FLOWER,\n", "            flower: self.growth.2 >= DAYS_A_FLOWER,\n            gaze: Vec2::ZERO,\n            skin: Skin::Classic,\n            sink: 0.0,\n"),
     ("        } else {\n            painter.circle_filled(at(x, y), 2.0 * u, ink);\n",
      "        } else {\n            // Following the pointer near him.\n            painter.circle_filled(at(x + look.gaze.x * 1.4, y + look.gaze.y * 1.1), 2.0 * u, ink);\n"),
 ]:
     assert plant.count(a) == 1, a
     plant = plant.replace(a, b)
+# Another plant than him (a cactus, a sunflower: see skins.rs): drawn instead of his leaves and his flower.
+leaves_from = "    // His leaves: stems from the soil, big leaves swaying (flapping, held).\n"
+leaves_to = "    // Tired: z's floating up from his leaves.\n"
+assert plant.count(leaves_from) == 1 and plant.count(leaves_to) == 1
+i, j = plant.index(leaves_from), plant.index(leaves_to)
+inner = "".join(("        " + l if l.strip() else l) for l in plant[i:j].splitlines(keepends=True))
+plant = (plant[:i]
+         + "    // Changing plant (see skins.rs): sinking into the soil, popping out.\n"
+         + "    let grown = 1.0 - look.sink;\n"
+         + "    let u = u * grown;\n"
+         + "    let at = |x: f32, y: f32| at(x * grown, -32.0 + (y + 32.0) * grown);\n"
+         + "    if grown > 0.02 {\n"
+         + "        if look.skin != Skin::Classic {\n            paint_skin(painter, look, now, u, &at);\n        } else {\n"
+         + inner + "        }\n    }\n" + plant[j:])
+# His flower of the day: open once watered GOOD_DAY times today, gone the next day (not after 20 good days).
+for x, y in [("            flower: self.growth.2 >= DAYS_A_FLOWER,\n",
+              "            // Today's flower (the date only looked at once watered enough).\n"
+              "            flower: self.growth.1 >= GOOD_DAY && self.growth.0 == chrono::Local::now().format(\"%Y-%m-%d\").to_string(),\n"),
+             ("        // Grown for a month: a pink flower", "        // Watered well today: a pink flower")]:
+    assert plant.count(x) == 1, x
+    plant = plant.replace(x, y)
 # A word when a newer version is out, and hello at the very first start.
 plant = plant.replace("""    /// The horde gone.
     Gone,
@@ -255,6 +281,27 @@ pass_line = find("            let pass = !(over || plant.grab.is_some());", ui_f
 block = lines(ui_from, gerard - 1)
 block = block.replace("        if self.shown.matheo {\n", "        {\n", 1)
 block = block.replace("self.shown.matheo_tips", "self.settings.tips")
+# The watering can kept beside him until used (not gone after 3 min): thirstier once, when it has
+# waited CAN_WAITS (see `can_counted`); drawn again only while it hops in or wiggles.
+for x, y in [
+    ("""                Some((since, None)) if since.elapsed() >= CAN_WAITS => {
+                    plant.can = None;
+                    plant.set_thirst(plant.thirst + 1);
+                }
+""", """                Some((since, None)) if since.elapsed() >= CAN_WAITS && self.can_counted != Some(since) => {
+                    self.can_counted = Some(since);
+                    plant.set_thirst(plant.thirst + 1);
+                }
+                Some((since, None)) => {
+                    let t = since.elapsed().as_secs_f32();
+                    if t < 0.6 || t % 3.0 < 0.7 {
+                        plant_busy = true;
+                    }
+                }
+"""),
+]:
+    assert block.count(x) == 1, x
+    block = block.replace(x, y)
 # A right click on him (or his bubble): his menu.
 anchor = "            let over = mouse.at.is_some_and(|p| body.contains(p)) || on_bubble || on_can;\n"
 assert anchor in block
@@ -308,6 +355,7 @@ tests = tests.replace("crate::i18n::Lang::ALL", "crate::i18n::Lang::ALL")
 
 overlay = (HERE / "overlay_head.rs").read_text()
 overlay = overlay.replace("//@SEASON@", (HERE / "season.rs").read_text().rstrip())
+overlay = overlay.replace("//@SKINS@", (HERE / "skins.rs").read_text().rstrip())
 overlay = overlay.replace("//@ANTICS@", (HERE / "antics.rs").read_text().rstrip())
 overlay = overlay.replace("//@CARE@", (HERE / "care.rs").read_text().rstrip())
 overlay = overlay.replace("//@PLANT@", plant).replace("//@BLOCK@", block).replace("//@OS@", oses).replace("//@TESTS@", tests)

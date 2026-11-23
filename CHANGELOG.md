@@ -4,6 +4,16 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
+- **Trois tenues au choix** (clic droit, « Mon apparence… ») : la plante verte, Paloma le cactus (côtes, épines, deux bras qui font coucou) ou Hélio le tournesol, dont le cœur se tourne vers ta souris. Il reste Mathéo, avec le même pot et le même visage. Quand tu changes de tenue, l’ancienne s’enfonce dans la terre et la nouvelle jaillit en faisant voler la terre.
+- **La fleur du jour** : arrose-le 3 fois dans la journée et une fleur s’ouvre, jusqu’au lendemain.
+- **Son arrosoir reste à côté de lui** tant qu’il n’a pas bu, et revient en sautillant quand tu le reposes ailleurs.
+- **Son arrivée** : à chaque lancement, il descend en parachute ou surgit du bas de l’écran avec un petit rebond.
+- **Son menu, rangé** : par thèmes, avec un trait entre chacun, et à la première personne (« Mes conseils », « Mon journal »).
+- **Il te dit ce qui est nouveau** au premier démarrage d’une nouvelle version.
+- **Corrigé** : quand on le secouait, plusieurs phrases s’affichaient en alternance très vite ; il n’en dit plus qu’une.
+
 ## [0.2.1] - 2026-11-23
 
 - **Il te suit des yeux** : quand la souris passe près de lui, son regard la suit, puis revient droit devant quand elle s’éloigne.

@@ -299,3 +299,77 @@ fn paint_antics_gallery(painter: &egui::Painter, area: Rect, now: f64) {
     paint_matheo_as(painter, foot, MATHEO_H, now, Look { held: true, tilt: (now as f32 * 5.0) % std::f32::consts::TAU, ..base });
     label(foot, "En vol");
 }
+
+/// How he arrives at each start, at random: under his parachute from up high, or popping out of
+/// the bottom of the screen with a bomp.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Entrance {
+    Chute,
+    Pop,
+}
+
+impl Entrance {
+    /// This start's (debug builds: `MATHEO_ENTRANCE=chute|pop`).
+    fn now() -> Entrance {
+        if cfg!(debug_assertions)
+            && let Ok(forced) = std::env::var("MATHEO_ENTRANCE")
+        {
+            return if forced.eq_ignore_ascii_case("pop") { Entrance::Pop } else { Entrance::Chute };
+        }
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
+        if (nanos / 1000).is_multiple_of(2) { Entrance::Chute } else { Entrance::Pop }
+    }
+}
+
+/// Popping out of the bottom of the screen: rising from `depth` points under his place, past it
+/// (`POP_JUMP` points over), falling back, then squashed and wobbling (the bomp).
+const POP_RISE: f32 = 0.42;
+const POP_FALL: f32 = 0.26;
+const POP_SETTLE: f32 = 0.5;
+const POP_JUMP: f32 = 28.0;
+
+/// Popping out, `t` seconds in: how far under his place he's drawn, how high off it (his `hop`),
+/// how squashed; None once over.
+fn pop_at(t: f32, depth: f32) -> Option<(f32, f32, f32)> {
+    if t < 0.0 {
+        return Some((depth, 0.0, 0.0));
+    }
+    if t < POP_RISE {
+        let f = 1.0 - (1.0 - t / POP_RISE).powi(3);
+        let y = -depth + (depth + POP_JUMP) * f;
+        return Some(if y < 0.0 { (-y, 0.0, -0.12 * (1.0 - f)) } else { (0.0, y, 0.0) });
+    }
+    let t = t - POP_RISE;
+    if t < POP_FALL {
+        let g = t / POP_FALL;
+        return Some((0.0, POP_JUMP * (1.0 - g * g), 0.0));
+    }
+    let t = t - POP_FALL;
+    if t < POP_SETTLE {
+        let g = t / POP_SETTLE;
+        return Some((0.0, 0.0, 0.26 * (1.0 - g).powf(1.5) * (g * 2.5 * std::f32::consts::PI).cos()));
+    }
+    None
+}
+
+#[cfg(test)]
+mod entrance_tests {
+    use super::{POP_FALL, POP_JUMP, POP_RISE, POP_SETTLE, pop_at};
+
+    #[test]
+    fn he_pops_out_of_the_bottom_then_bomps() {
+        let depth = 150.0;
+        // Hidden under the screen at first.
+        assert!(pop_at(0.0, depth).is_some_and(|(below, hop, _)| below >= depth - 0.1 && hop == 0.0));
+        // Over his place at the top of his jump.
+        assert!(pop_at(POP_RISE, depth).is_some_and(|(below, hop, _)| below == 0.0 && (hop - POP_JUMP).abs() < 0.1));
+        // Down, squashed.
+        assert!(pop_at(POP_RISE + POP_FALL + 0.001, depth).is_some_and(|(below, hop, squash)| below == 0.0 && hop.abs() < 0.5 && squash > 0.2));
+        assert_eq!(pop_at(POP_RISE + POP_FALL + POP_SETTLE, depth), None);
+        // Never below ground once out, never NaN.
+        for k in 0..200 {
+            let (below, hop, squash) = pop_at(k as f32 / 150.0, depth).unwrap_or_default();
+            assert!(below >= 0.0 && hop >= 0.0 && squash.is_finite());
+        }
+    }
+}
