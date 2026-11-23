@@ -4,6 +4,8 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-23
+
 - **Il te suit des yeux** : quand la souris passe près de lui, son regard la suit, puis revient droit devant quand elle s’éloigne.
 - **Beaucoup plus léger** : il ne se redessine plus à chaque mouvement de souris, seulement quand elle passe près de lui, et il se balance au repos avec deux fois moins d’images (son clignement d’yeux reste à l’heure). Sur un Mac à quatre écrans, il passe d’environ 22 % d’un cœur de processeur à moins de 6 %.
 
