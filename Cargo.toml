@@ -1,6 +1,6 @@
 [package]
 name = "matheo"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 description = "Mathéo, la plante verte qui veille sur toi en bas de l'écran."
 publish = false
