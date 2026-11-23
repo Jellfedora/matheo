@@ -29,6 +29,10 @@ struct Mouse {
 /// Mathéo's window.
 struct Overlay {
     mouse: Arc<Mutex<Mouse>>,
+    /// Where the pointer matters (him, his bubble, his can, a margin around, where his eyes follow
+    /// it): a move there draws again at once; elsewhere it waits for the next frame (see `run`).
+    /// None: everywhere.
+    hot: Arc<Mutex<Option<Rect>>>,
     settings: Settings,
     /// The screen covered and its part left by the Dock, the menu bar or the task bar (points).
     screen: Rect,
@@ -64,7 +68,12 @@ struct Overlay {
     /// Windows: frames left to clear what stays behind the drawing (see `glass`), after a change
     /// that may have made it white.
     glass: u8,
+    /// Where his eyes look (see `Look::gaze`), going smoothly towards the pointer near him.
+    gaze: Vec2,
 }
+
+/// How near the pointer comes for his eyes to follow it (points from his face).
+const GAZE_FROM: f32 = 260.0;
 
 /// A window over another screen than the pointer's.
 struct Other {
@@ -315,6 +324,7 @@ impl Plant {
             },
             extra: (self.growth.2 / DAYS_A_LEAF).min(3) as usize,
             flower: self.growth.2 >= DAYS_A_FLOWER,
+            gaze: Vec2::ZERO,
             wilt: self.wilt(),
         }
     }
@@ -724,6 +734,8 @@ struct Look {
     flower: bool,
     /// Not watered (0 to 1): his leaves hang and yellow, he sulks.
     wilt: f32,
+    /// Where his eyes look, the pointer near him (his units, 1 at most): towards it.
+    gaze: Vec2,
 }
 
 fn paint_matheo_as(painter: &egui::Painter, foot: Pos2, size: f32, now: f64, look: Look) {
@@ -769,7 +781,8 @@ fn paint_matheo_as(painter: &egui::Painter, foot: Pos2, size: f32, now: f64, loo
         } else if blink {
             painter.line_segment([at(x - 2.0, y), at(x + 2.0, y)], Stroke::new(1.5 * u, ink));
         } else {
-            painter.circle_filled(at(x, y), 2.0 * u, ink);
+            // Following the pointer near him.
+            painter.circle_filled(at(x + look.gaze.x * 1.4, y + look.gaze.y * 1.1), 2.0 * u, ink);
         }
     }
     if look.dizzy {
@@ -1121,14 +1134,19 @@ pub(crate) fn run(settings: Settings) {
     }
     let mouse = Arc::new(Mutex::new(Mouse::default()));
     let ctx_slot: Arc<Mutex<Option<egui::Context>>> = Arc::new(Mutex::new(None));
-    // The pointer, read about 60 times a second; a move draws again.
+    let hot: Arc<Mutex<Option<Rect>>> = Arc::new(Mutex::new(None));
+    // The pointer, read about 60 times a second; a click, or a move near him, draws again (a move
+    // elsewhere waits for the next frame: drawing each screen's window 60 times a second as the
+    // pointer goes about cost a third of a core).
     {
-        let (mouse, ctx_slot) = (mouse.clone(), ctx_slot.clone());
+        let (mouse, ctx_slot, hot) = (mouse.clone(), ctx_slot.clone(), hot.clone());
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(Duration::from_millis(16));
                 let now = test_pointer().unwrap_or_else(os::mouse);
-                let changed = mouse.lock().map(|mut m| std::mem::replace(&mut *m, now) != now).unwrap_or(false);
+                let was = mouse.lock().map(|mut m| std::mem::replace(&mut *m, now)).unwrap_or(now);
+                let near = |p: Option<Pos2>| hot.lock().ok().is_none_or(|h| h.is_none_or(|r| p.is_some_and(|p| r.contains(p))));
+                let changed = was.pressed != now.pressed || was.right != now.right || (was.at != now.at && (near(was.at) || near(now.at)));
                 if changed && let Some(ctx) = ctx_slot.lock().ok().and_then(|c| c.clone()) {
                     ctx.request_repaint();
                 }
@@ -1203,7 +1221,7 @@ pub(crate) fn run(settings: Settings) {
                     crate::access::ask();
                 }
             }
-            Ok(Box::new(Overlay { mouse, settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), antics: Antics::default(), care: Care::new(first), page: Page::Main, naming: None, logged: String::new(), glass: GLASS }))
+            Ok(Box::new(Overlay { mouse, hot: hot.clone(), settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), antics: Antics::default(), care: Care::new(first), page: Page::Main, naming: None, logged: String::new(), glass: GLASS, gaze: Vec2::ZERO }))
         }),
     );
     match result {
@@ -1728,8 +1746,19 @@ impl eframe::App for Overlay {
             self.season = Season::now();
         }
         self.care.step(&mut self.matheo, self.settings.tips, self.settings.hours, self.settings.name.is_some(), mouse.at);
+        // His eyes following the pointer near him (back ahead when it goes away), smoothly.
+        let to = self.matheo.at.zip(mouse.at).map_or(Vec2::ZERO, |(at, p)| {
+            let d = p - (at - Vec2::new(0.0, MATHEO_H * 0.25));
+            if d.length() > GAZE_FROM || d.length() < 1.0 { Vec2::ZERO } else { d.normalized() * (d.length() / 60.0).min(1.0) }
+        });
+        self.gaze += (to - self.gaze) * (1.0 - (-14.0 * dt).exp());
+        if (to - self.gaze).length() > 0.02 {
+            plant_busy = true;
+        } else {
+            self.gaze = to;
+        }
         let m = &self.matheo;
-        let look = self.antics.dress(m.look(m.tired.0, m.friday), m);
+        let look = Look { gaze: self.gaze, ..self.antics.dress(m.look(m.tired.0, m.friday), m) };
         let can = m.at.zip(m.can).map(|(at, (since, pour))| can_view(at, can_side(at, &works), since, pour));
         let plant = m.at.map(|at| (at, look));
         let season = self.season;
@@ -1870,8 +1899,11 @@ impl eframe::App for Overlay {
             }
             keys.extend(typed_keys);
             if his {
-                // His leaves sway gently (what floats around him in season, smoothly).
-                next = next.min(if season.is_some() { 0.04 } else { 0.1 });
+                // His leaves sway gently, slowly: 5 frames a second are enough (what floats around
+                // him in season, smoothly); his blink, on time.
+                next = next.min(if season.is_some() { 0.04 } else { 0.2 });
+                let blink = now % 4.0;
+                next = next.min(if blink < 0.12 { 0.12 - blink } else { 4.0 - blink } as f32 + 0.005);
             }
         }
         if self.naming.as_ref().is_some_and(|n| n.keys.is_some()) {
@@ -1888,6 +1920,21 @@ impl eframe::App for Overlay {
             self.glass -= 1;
             clear_glass();
             busy = true;
+        }
+        // Where a move of the pointer draws again at once (see `run`).
+        let near = self.matheo.at.map(|at| {
+            let mut r = Rect::from_center_size(at - Vec2::new(0.0, MATHEO_H * 0.5), Vec2::new(MATHEO_H * 0.7, MATHEO_H));
+            if let Some(b) = self.matheo.bubble.filter(|_| self.matheo.tip.is_some()) {
+                r = r.union(b);
+            }
+            if self.matheo.can.is_some() {
+                r = r.union(can_rect(at, can_side(at, &works)));
+            }
+            r.expand(32.0).union(Rect::from_center_size(at - Vec2::new(0.0, MATHEO_H * 0.25), Vec2::splat(GAZE_FROM * 2.0)))
+        });
+        if let Ok(mut hot) = self.hot.lock() {
+            // A menu open, a name typed: everywhere.
+            *hot = if self.menu.is_some() || self.naming.is_some() { None } else { near };
         }
         if busy {
             ctx.request_repaint();

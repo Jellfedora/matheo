@@ -197,6 +197,15 @@ for gone in ['        ("Salut Gérard", Look { wave: 1.0, ..base }, None),\n', '
     assert gone in plant, gone
     plant = plant.replace(gone, "")
 plant = plant.replace("pub(super) fn paint_matheo(", "#[allow(dead_code)]\nfn paint_matheo(")
+# His eyes following the pointer near him (`gaze`, set by the window: see overlay_head.rs).
+for a, b in [
+    ("    wilt: f32,\n}\n", "    wilt: f32,\n    /// Where his eyes look, the pointer near him (his units, 1 at most): towards it.\n    gaze: Vec2,\n}\n"),
+    ("            flower: self.growth.2 >= DAYS_A_FLOWER,\n", "            flower: self.growth.2 >= DAYS_A_FLOWER,\n            gaze: Vec2::ZERO,\n"),
+    ("        } else {\n            painter.circle_filled(at(x, y), 2.0 * u, ink);\n",
+     "        } else {\n            // Following the pointer near him.\n            painter.circle_filled(at(x + look.gaze.x * 1.4, y + look.gaze.y * 1.1), 2.0 * u, ink);\n"),
+]:
+    assert plant.count(a) == 1, a
+    plant = plant.replace(a, b)
 # A word when a newer version is out, and hello at the very first start.
 plant = plant.replace("""    /// The horde gone.
     Gone,

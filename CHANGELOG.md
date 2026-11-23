@@ -4,6 +4,9 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+- **Il te suit des yeux** : quand la souris passe près de lui, son regard la suit, puis revient droit devant quand elle s’éloigne.
+- **Beaucoup plus léger** : il ne se redessine plus à chaque mouvement de souris, seulement quand elle passe près de lui, et il se balance au repos avec deux fois moins d’images (son clignement d’yeux reste à l’heure). Sur un Mac à quatre écrans, il passe d’environ 22 % d’un cœur de processeur à moins de 6 %.
+
 ## [0.2.0] - 2026-11-19
 
 - **Ton prénom** : il te demande comment t’appeler, directement dans sa bulle (clique dans la case, écris, « C’est moi ! » ou « Passer »). Il le retient et le glisse de temps en temps dans ses phrases. Modifiable dans son menu (« Mon prénom… »).
