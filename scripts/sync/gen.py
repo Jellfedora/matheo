@@ -97,6 +97,10 @@ MENU = {
     "menu_hour_afternoon": ("Pause de l’aprèm", "Afternoon break"),
     "menu_hour_home": ("Fin de journée", "End of the day"),
     "menu_hours_reset": ("Remettre par défaut", "Back to default"),
+    "glass_one": ("{n} verre d’eau", "{n} glass of water"),
+    "glass_many": ("{n} verres d’eau", "{n} glasses of water"),
+    "thanks_glass_first": ("Premier verre d’eau de la journée !", "First glass of water today!"),
+    "thanks_glass_more": ("Et de {glasses} aujourd’hui !", "That’s {glasses} today!"),
     "matheo_hi": ("Coucou ! Moi c’est Mathéo, ta nouvelle plante de bureau. Je veille sur toi : de l’eau, un peu de mouvement, des pauses. En échange, juste un petit coup d’arrosoir de temps en temps. Un clic droit sur moi pour mon menu !",
                   "Hi there! I’m Mathéo, your new desk plant. I look after you: water, a bit of moving, breaks. In return, just a little watering now and then. Right-click me for my menu!"),
 }
@@ -117,13 +121,94 @@ V = {
     'matheo_again': (['Coucou, c’est encore moi ! Je me suis fait une petite beauté (nouvelle version), et j’ai appris plein de trucs.', 'Tadaa ! Une nouvelle version de moi, toute fraîche. Et j’ai des surprises pour toi.'], ['Hi, it’s me again! I got a little makeover (new version) and learned lots of new tricks.', 'Ta-da! A brand new version of me. And I have surprises for you.']),
     # What's new in this version, said once at the first start after the update. Changed at each
     # release, its words shown to and approved by Julien first.
-    'matheo_news': (['Coucou, c’est moi ! J’ai appris un tour de magie… je peux me transformer en petit cactus ou en tournesol ! Fais un clic droit sur moi, « Mon apparence… », et choisis ma tenue.'],
-                    ['Hi, it’s me! I learned a magic trick… I can turn into a little cactus or a sunflower! Right-click me, “My look…”, and pick my outfit.']),
+    'matheo_news': (['Coucou, c’est moi ! J’ai appris plein de nouvelles phrases, et Noël approche… j’ai une petite surprise pour les fêtes !'],
+                    ['Hi, it’s me! I learned lots of new things to say, and Christmas is coming… I have a little surprise for the holidays!']),
+    # The evening: the glasses of water of the day (his waterings), 1 or 2, 3 to 5, 6 and more.
+    'matheo_glasses_few': (['Petit bilan du jour, {name} : {glasses}. Demain, on en boit un de plus ?', 'Aujourd’hui : {glasses}. C’est un début ! Demain, on fait mieux ensemble ?'],
+                           ['Today’s little review, {name}: {glasses}. Shall we have one more tomorrow?', 'Today: {glasses}. It’s a start! Shall we do better together tomorrow?']),
+    'matheo_glasses_good': (['Bilan du jour : {glasses}, bien joué {name} ! Toi et mes racines, on est bien hydratés.', '{glasses} aujourd’hui ! Tu prends soin de toi, et de moi. Bravo !'],
+                            ['Today’s review: {glasses}, well done {name}! You and my roots are nicely hydrated.', '{glasses} today! You look after yourself, and after me. Bravo!']),
+    'matheo_glasses_lots': (['Waouh, {glasses} aujourd’hui ! Tu bois plus que moi, {name}.', 'Record ! {glasses} aujourd’hui. Je suis fier de toi.'],
+                            ['Wow, {glasses} today! You drink more than I do, {name}.', 'A record! {glasses} today. I’m proud of you.']),
+    # Some days: how are you? A thumb up or down in his bubble, and kind words either way.
+    'matheo_mood': (['Au fait, {name}… ça va aujourd’hui ?', 'Petite question du jour : comment tu te sens ?', 'Hé, {name} ! Ta journée se passe bien ?', 'Coucou, {name} ! Petit point météo intérieure : plutôt soleil ou plutôt nuages ?', 'Je prends de tes nouvelles : comment ça se passe pour toi aujourd’hui ?', 'Dis-moi, {name}, la journée est plutôt douce ou plutôt rude ?'],
+                    ['By the way, {name}… how are you today?', 'Little question of the day: how are you feeling?', 'Hey, {name}! Is your day going well?', 'Hi, {name}! Little inner weather check: more sunshine or more clouds?', 'Just checking in: how’s it going for you today?', 'Tell me, {name}, is the day going gently or roughly?']),
+    'matheo_mood_up': (['Super ! Ça me fait pousser une feuille de plus.', 'Génial ! Garde ce sourire, il te va bien, {name}.', 'Trop bien ! Moi aussi je suis en pleine forme : on fait une belle équipe.', 'Ah, ça fait plaisir ! Profite bien de cette belle journée.', 'Youpi ! Ta bonne humeur, c’est mon soleil du jour.', 'Ça se voit, tu rayonnes ! Continue comme ça, {name}.', 'Parfait ! Je fais une petite danse des feuilles pour fêter ça.', 'Chouette ! Retiens ce qui t’a fait du bien aujourd’hui, on en refera.'],
+                       ['Great! That makes me grow one more leaf.', 'Brilliant! Keep that smile, it suits you, {name}.', 'Awesome! I’m in great shape too: we make a fine team.', 'Ah, that’s lovely to hear! Enjoy this good day.', 'Yay! Your good mood is my sunshine today.', 'It shows, you’re glowing! Keep it up, {name}.', 'Perfect! I’m doing a little leaf dance to celebrate.', 'Lovely! Remember what did you good today, we’ll do it again.']),
+    'matheo_mood_down': (['Besoin de te défouler, {name} ? Attrape-moi et envoie-moi valser : je rebondis, ça ne me fait même pas mal !', 'Courage. Prends cinq minutes pour toi, un verre d’eau, un peu d’air : tu le mérites.', 'Merci de me le dire. Vas-y doucement aujourd’hui, tu fais déjà de ton mieux.', 'Des jours sans, même les plantes en ont. Demain, on repousse ensemble.', 'Je t’envoie un gros câlin de feuilles. Ça va aller, {name}.', 'Ça arrive à tout le monde. Une chose à la fois, et un peu de douceur pour toi.', 'Je reste à côté de toi, {name}. Si tu veux, on respire un grand coup ensemble.', 'Même un jour gris finit par passer. Et moi, je trouve que tu t’en sors très bien.'],
+                         ['Need to let off steam, {name}? Grab me and send me flying: I bounce, it doesn’t even hurt!', 'Hang in there. Take five minutes for yourself, a glass of water, some air: you deserve it.', 'Thanks for telling me. Go easy today, you’re already doing your best.', 'Even plants have off days. Tomorrow, we grow again together.', 'Sending you a big leafy hug. It’ll be all right, {name}.', 'It happens to everyone. One thing at a time, and a little kindness for yourself.', 'I’m staying right beside you, {name}. If you like, we can take a deep breath together.', 'Even a grey day passes in the end. And I think you’re doing really well.']),
+    # His season's outfit on: a word of the feast now and then (see `feast_due`). Christmas before the
+    # 24th, then on the day.
+    'matheo_christmas_soon': (['Mon bonnet de Noël est sorti ! Toi aussi, tu as fait ton sapin ?', 'La neige tombe sur mes feuilles… Ça sent bon le chocolat chaud, non ?', 'Petit rappel de lutin : pense à faire une pause entre deux listes de cadeaux.', 'Sur ma lettre au Père Noël, j’ai mis : de l’eau, du soleil, et toi en pleine forme.', 'Décembre, c’est chargé. Prends le temps de souffler, la magie de Noël n’est pas pressée.', 'Tu entends les grelots ? Non ? Moi non plus, mais j’ai mon bonnet, alors c’est tout comme.'],
+                              ['My Santa hat is out! Have you put up your tree too?', 'Snow is falling on my leaves… Smells like hot chocolate, doesn’t it?', 'A little elf reminder: take a break between two gift lists.', 'On my letter to Santa, I wrote: water, sunshine, and you in great shape.', 'December is busy. Take time to breathe, Christmas magic is in no hurry.', 'Hear the sleigh bells? No? Me neither, but I’ve got my hat, so it’s the same thing.']),
+    'matheo_christmas': (['Joyeux Noël, {name} ! J’espère que tu passes un moment tout doux.', 'C’est Noël ! Qu’est-ce que tu fais devant l’écran ? Va en profiter, je garde la maison.', 'Ho ho ho ! Le Père Noël est passé ? Moi, j’ai eu un flocon sur chaque feuille.'],
+                         ['Merry Christmas, {name}! I hope you’re having a lovely, cosy time.', 'It’s Christmas! What are you doing at the screen? Go and enjoy it, I’ll mind the house.', 'Ho ho ho! Has Santa been? I got a snowflake on every leaf.']),
+    'matheo_new_year': (['Nouvelle année, nouvelles feuilles ! Je te souhaite plein de belles choses, {name}.', 'Ma résolution : pousser un peu chaque jour. Et toi, c’est quoi la tienne ?', 'Confettis ! Une année de plus ensemble, ça se fête. Avec un verre… d’eau, bien sûr.', 'Cette année, je continue à veiller sur toi. Promis, juré, arrosé.'],
+                        ['New year, new leaves! Wishing you lots of lovely things, {name}.', 'My resolution: grow a little every day. What’s yours?', 'Confetti! Another year together, let’s celebrate. With a glass… of water, of course.', 'This year, I’ll keep looking after you. Cross my heart, water my pot.']),
+    'matheo_valentine': (['Joyeuse Saint-Valentin ! Aujourd’hui, dis à quelqu’un que tu l’aimes bien : un ami, ta famille, ou même toi.', 'J’ai mis mon plus beau nœud rouge. Je t’aime bien, tu sais, {name}.', 'Des cœurs partout ! Tu mérites autant d’amour que tu en donnes.'],
+                         ['Happy Valentine’s Day! Today, tell someone you care about them: a friend, your family, or even yourself.', 'I’m wearing my best red bow. I like you a lot, you know, {name}.', 'Hearts everywhere! You deserve as much love as you give.']),
+    'matheo_easter': (['Regarde mes oreilles de lapin ! Tu crois que ça me va ?', 'J’ai trouvé un œuf à côté de mon pot ! Il est en chocolat, tu crois ?', 'Bientôt Pâques ou déjà Pâques : le chocolat, c’est toujours une bonne idée. Avec modération !', 'Le printemps est là, et moi je fais le lapin. Et toi, tu sautes de joie, {name} ?'],
+                      ['Look at my bunny ears! Do you think they suit me?', 'I found an egg next to my pot! Do you think it’s chocolate?', 'Easter soon or Easter already: chocolate is always a good idea. In moderation!', 'Spring is here and I’m being a bunny. Are you jumping for joy, {name}?']),
+    'matheo_halloween': (['Bouh ! Je t’ai fait peur ? Non ? Pourtant, j’ai mon chapeau de sorcière…', 'Une chauve-souris tourne autour de moi. Je crois qu’on s’entend bien, maintenant.', 'Des bonbons ou un sort ! Bon, un verre d’eau, ça me va aussi.', 'C’est la semaine d’Halloween : même les citrouilles font des pauses.'],
+                         ['Boo! Did I scare you? No? But I’ve got my witch’s hat…', 'A bat is flying around me. I think we get along now.', 'Trick or treat! Well, a glass of water will do too.', 'It’s Halloween week: even pumpkins take breaks.']),
     'more_ouch': (['Aïe !', 'Ouille, ma tête !', 'Aïeuh ! Doucement…', 'Bonk ! Je vois des étoiles…'], ['Ouch!', 'Ow, my head!', 'Ouchie! Gently…', 'Bonk! I see stars…']),
     'more_shaking': (['Waaaah ! Arrête !', 'Je vais avoir mal au cœur !', 'Pas si fort, j’ai la tête qui tourne !'], ['Waaaah! Stop it!', 'I’m going to be sick!', 'Not so hard, my head’s spinning!']),
     'more_thanks': (['Merci ! Santé ! Ça fait du bien.', 'Ahhh, délicieux ! Merci, {name}.', 'Glou glou glou… Je revis !', 'Merci ! Je sens que je vais pousser d’un coup.'], ['Thanks! Cheers! That feels good.', 'Ahhh, delicious! Thank you, {name}.', 'Glug glug glug… I’m alive again!', 'Thanks! I can feel myself growing.']),
     'more_thirsty': (['J’ai soif… et toi aussi, sûrement. Un grand verre d’eau, puis un coup d’arrosoir ?', 'Mes feuilles font la tête… Un peu d’eau pour moi, et un verre pour toi ?', 'Je suis tout sec, {name}… On boit un coup ensemble ?'], ["I'm thirsty… and so are you, surely. A big glass of water, then the watering can?", 'My leaves are sulking… A little water for me, and a glass for you?', 'I’m all dry, {name}… Shall we have a drink together?']),
 }
+
+# More words of his, added to Ronnie's lists (`FIELDS`) and to his own (`V`): French, English.
+MORE = {
+    'matheo_water': (['Glou glou : un grand verre d’eau, et tu repars comme une fleur.', 'Petit rappel de ta plante préférée : l’eau, c’est la vie. Un verre ?', 'Tu as la bouche sèche ? Moi, j’ai les feuilles sèches. On boit un coup tous les deux ?'],
+                     ['Glug glug: a big glass of water, and you’ll be fresh as a daisy.', 'A little reminder from your favourite plant: water is life. A glass?', 'Dry mouth? I’ve got dry leaves. Shall we both have a drink?']),
+    'matheo_moves': (['Lève les genoux, comme si tu marchais sur place. Dix fois, allez !', 'Remonte les épaules vers tes oreilles, tiens trois secondes… et relâche. Ahhh.', 'Va remplir ton verre un peu plus loin : des pas et de l’eau, deux en un.', 'Fais de grands cercles avec les bras, comme un moulin. Cinq dans chaque sens.', 'Un appel à passer ? Fais-le debout, en marchant un peu.'],
+                     ['Lift your knees, as if marching on the spot. Ten times, go!', 'Shrug your shoulders up to your ears, hold three seconds… and let go. Ahhh.', 'Go and fill your glass a little further away: steps and water, two in one.', 'Make big circles with your arms, like a windmill. Five each way.', 'A call to make? Take it standing up, walking around a little.']),
+    'matheo_bed': (['Les étoiles sont de sortie. Pour toi, c’est l’heure de la couette.', 'Un bon sommeil, c’est le meilleur des engrais. Bonne nuit !', 'Je replie mes feuilles pour la nuit. Fais pareil avec ton écran, à demain !'],
+                   ['The stars are out. For you, it’s duvet time.', 'Good sleep is the best fertiliser. Good night!', 'I’m folding my leaves for the night. Do the same with your screen, see you tomorrow!']),
+    'matheo_weekend': (['Vendredi ! Je sors déjà mon petit chapeau de paille.', 'Encore un petit effort, et c’est deux jours rien qu’à toi.', 'Tu as prévu quoi ce week-end ? Moi : soleil, eau fraîche et grasse matinée.'],
+                       ['Friday! I’m already getting my little straw hat out.', 'One last little push, and it’s two days all for you.', 'What are your weekend plans? Mine: sun, fresh water and a lie-in.']),
+    'matheo_break': (['Deux heures sans bouger… Même un cactus ferait une pause, tu sais.', 'Pause obligatoire, ordre de ta plante ! Va marcher un peu, je ne bouge pas d’ici.', 'Tes épaules ont besoin d’une pause, tes yeux aussi. Cinq minutes, debout !'],
+                     ['Two hours without moving… Even a cactus would take a break, you know.', 'Mandatory break, plant’s orders! Go for a little walk, I’m not going anywhere.', 'Your shoulders need a break, and your eyes too. Five minutes, on your feet!']),
+    'matheo_pause': (['Pause, {name} ! Un verre d’eau, quelques pas, un regard par la fenêtre : la recette parfaite.', 'Tu as bien avancé. Maintenant, cinq minutes pour toi, sans écran.', 'Pause méritée ! Je garde ta place au chaud en t’attendant.'],
+                     ['Break time, {name}! A glass of water, a few steps, a look out of the window: the perfect recipe.', 'You’ve made good progress. Now, five minutes for you, no screen.', 'Well-earned break! I’ll keep your seat warm while you’re away.']),
+    'matheo_lunch': (['Midi, l’heure de recharger les batteries ! Un bon repas, et tu reviens en pleine forme.', 'On mange, {name} ! Prends ton temps, mâche doucement, savoure.', 'Petite faim ? Grosse faim ? Dans tous les cas, c’est l’heure du repas !'],
+                     ['Noon, time to recharge! A good meal, and you’ll be back in great shape.', 'Time to eat, {name}! Take your time, chew slowly, enjoy.', 'Peckish? Starving? Either way, it’s mealtime!']),
+    'matheo_home': (['La journée est finie ! Déconnecte un peu, tu l’as bien mérité, {name}.', 'Bravo pour aujourd’hui. Maintenant, place au repos, à tes proches et aux bonnes choses.', 'Ferme tes onglets, range ton bureau, et à demain ! Je veille sur tout ici.'],
+                    ['The day’s over! Switch off a bit, you’ve earned it, {name}.', 'Well done today. Now it’s time for rest, loved ones and good things.', 'Close your tabs, tidy your desk, and see you tomorrow! I’ll keep an eye on things here.']),
+    'matheo_monday': (['C’est reparti pour une semaine ! On commence par un verre d’eau, le reste suivra.', 'Lundi, nouveau départ. Qu’est-ce qui te ferait plaisir cette semaine, {name} ?'],
+                      ['Here we go, a new week! We start with a glass of water, the rest will follow.', 'Monday, a fresh start. What would make you happy this week, {name}?']),
+    'matheo_lamp': (['Il fait nuit tôt en ce moment… Une lampe allumée, et l’ambiance devient tout de suite plus douce.', 'De la lumière, s’il te plaît ! Travailler dans le noir, ça fatigue les yeux.'],
+                    ['It gets dark early these days… A lamp on, and things feel cosier right away.', 'Light, please! Working in the dark tires your eyes.']),
+    'matheo_weekend_work': (['C’est le week-end, {name}… Une petite heure, et après on file en profiter ?', 'Le week-end, c’est fait pour recharger les batteries. Ne reste pas trop longtemps, d’accord ?'],
+                            ['It’s the weekend, {name}… One little hour, and then off you go to enjoy it?', 'Weekends are for recharging. Don’t stay too long, all right?']),
+    'matheo_eyes': (['Ferme les yeux dix secondes. Voilà… Ça fait du bien, non ?', 'La règle du 20-20-20 : toutes les 20 minutes, regarde à 6 mètres pendant 20 secondes. On essaie ?'],
+                    ['Close your eyes for ten seconds. There… Feels good, doesn’t it?', 'The 20-20-20 rule: every 20 minutes, look 20 feet away for 20 seconds. Shall we try?']),
+    'matheo_posture': (['L’écran à hauteur des yeux, les pieds bien à plat : voilà une installation de pro.'],
+                       ['Screen at eye level, feet flat on the floor: now that’s a pro setup.']),
+    'matheo_breathe': (['Une minute de calme, {name} ? Respire avec moi : je gonfle, tu inspires ; je dégonfle, tu souffles.', 'On fait une pause respiration ? Suis mes feuilles : quand je grossis, inspire ; quand je rapetisse, souffle.'],
+                       ['A minute of calm, {name}? Breathe with me: I swell, you breathe in; I shrink, you breathe out.', 'A breathing break? Follow my leaves: when I grow, breathe in; when I shrink, breathe out.']),
+    'breathe_done': (['Et voilà, quatre respirations ! Le calme est revenu.', 'Bien joué ! Garde ce calme avec toi pour la suite de la journée.'],
+                     ['There we go, four breaths! Calm is back.', 'Well done! Keep that calm with you for the rest of the day.']),
+    'matheo_hot': (['Grosse chaleur aujourd’hui ! Garde une bouteille d’eau à portée de main.', 'Il fait si chaud que mes feuilles transpirent. Bois, {name}, bois !'],
+                   ['Big heat today! Keep a bottle of water within reach.', 'It’s so hot my leaves are sweating. Drink, {name}, drink!']),
+    'matheo_back': (['Ah, te voilà ! Je me demandais où tu te cachais.', 'Bon retour, {name} ! On reprend tranquillement ?'],
+                    ['Ah, there you are! I was wondering where you were hiding.', 'Welcome back, {name}! Shall we ease back in?']),
+    'matheo_named': (['{name}, c’est noté ! Je le garde précieusement dans mes racines.'],
+                     ['{name}, noted! I’ll keep it safe in my roots.']),
+    'more_ouch': (['Ouïe ouïe ouïe…', 'Mes feuilles !'], ['Ow ow ow…', 'My leaves!']),
+    'more_shaking': (['Stooop ! Je vais perdre mes feuilles !', 'Je ne suis pas un shaker, moi !'], ['Stooop! I’m going to lose my leaves!', 'I’m not a cocktail shaker!']),
+    'more_thanks': (['Mmm, de l’eau bien fraîche ! Merci.', 'Merci ! Mes racines font la fête.'], ['Mmm, nice fresh water! Thanks.', 'Thanks! My roots are partying.']),
+    'more_thirsty': (['Psst… ma terre est sèche comme un désert. Et ton verre, il en est où ?', 'Un peu d’eau, s’il te plaît ? On partage : un verre pour toi, l’arrosoir pour moi.'],
+                     ['Psst… my soil is as dry as a desert. And how’s your glass doing?', 'A little water, please? Let’s share: a glass for you, the can for me.']),
+    'matheo_glasses_few': (['Aujourd’hui, {glasses}. Pas grave ! Demain, on garde un verre à portée de main ?'], ['Today, {glasses}. No worries! Tomorrow, shall we keep a glass within reach?']),
+    'matheo_glasses_good': (['{glasses} aujourd’hui, joli score ! Toi et moi, on pousse bien.'], ['{glasses} today, nice score! You and I are growing well.']),
+    'matheo_glasses_lots': (['{glasses} ! Tu es une vraie source, {name}.'], ['{glasses}! You’re a real spring, {name}.']),
+}
+for k, (f, e) in MORE.items():
+    if k in V:
+        V[k] = (V[k][0] + f, V[k][1] + e)
+    else:
+        assert k in FIELDS, k
 
 decl = "\n".join(
     [f"    pub {f}: &'static [&'static str]," if f in ("matheo_water", "matheo_moves", "matheo_bed", "matheo_weekend", "matheo_break")
@@ -133,9 +218,40 @@ decl = "\n".join(
 )
 
 
+# Ronnie's words for developers, said otherwise by Mathéo: not only developers have him.
+REWORD = [
+    ("Il est tard… Va te coucher, le code sera encore là demain.", "Il est tard… Va te coucher, le travail sera encore là demain."),
+    ("Le bug de ce soir, tu le trouveras en deux minutes demain matin. Au lit !", "Ce qui te bloque ce soir, tu le régleras en deux minutes demain matin. Au lit !"),
+    ("Vendredi après-midi : on ne met rien en prod, d’accord ?", "Vendredi après-midi : on ne se lance pas dans un gros chantier, d’accord ?"),
+    ("It's late… Go to bed, the code will still be there tomorrow.", "It's late… Go to bed, the work will still be there tomorrow."),
+    ("Tonight's bug, you'll find it in two minutes tomorrow morning. Bedtime!", "What's stuck tonight, you'll sort out in two minutes tomorrow morning. Bedtime!"),
+    ("Friday afternoon: nothing goes to production, all right?", "Friday afternoon: no big new project, all right?"),
+]
+
+
+def reworded(text):
+    for a, b in REWORD:
+        text = text.replace(a, b)
+    return text
+
+
+def more(text, field, idx):
+    """Ronnie's list `field` (its Rust lines), with Mathéo's words in `MORE` added at its end."""
+    if field not in MORE:
+        return text
+    head, end = text.rsplit("\n", 1)
+    return head + "\n" + "".join(f'        "{x}",\n' for x in MORE[field][idx]) + end
+
+
 def body(sec, idx):
     lists = [f"    {k}: &[\n" + "".join(f'        "{x}",\n' for x in v[idx]) + "    ]," for k, v in V.items()]
-    return "\n".join([value(sec, f) for f in FIELDS] + [f'    {k}: "{v[idx]}",' for k, v in MENU.items()] + lists)
+    return "\n".join([more(reworded(value(sec, f)), f, idx) for f in FIELDS] + [f'    {k}: "{v[idx]}",' for k, v in MENU.items()] + lists)
+
+
+_said = "\n".join(value(fr, f) + value(en, f) for f in FIELDS)
+for a, _ in REWORD:
+    if a not in _said:
+        raise SystemExit(f"no longer in Ronnie's words: {a}")
 
 
 (OUT / "i18n.rs").write_text(f'''//! Mathéo's words, in French and in English (taken from Ronnie's).
@@ -204,8 +320,8 @@ for gone in ['        ("Salut Gérard", Look { wave: 1.0, ..base }, None),\n', '
 plant = plant.replace("pub(super) fn paint_matheo(", "#[allow(dead_code)]\nfn paint_matheo(")
 # His eyes following the pointer near him (`gaze`, set by the window: see overlay_head.rs).
 for a, b in [
-    ("    wilt: f32,\n}\n", "    wilt: f32,\n    /// Where his eyes look, the pointer near him (his units, 1 at most): towards it.\n    gaze: Vec2,\n    /// Which plant he is (see `skins.rs`).\n    skin: Skin,\n    /// Changing plant: how far down in the soil (0 out, 1 gone; below 0, popping out bigger).\n    sink: f32,\n}\n"),
-    ("            flower: self.growth.2 >= DAYS_A_FLOWER,\n", "            flower: self.growth.2 >= DAYS_A_FLOWER,\n            gaze: Vec2::ZERO,\n            skin: Skin::Classic,\n            sink: 0.0,\n"),
+    ("    wilt: f32,\n}\n", "    wilt: f32,\n    /// Where his eyes look, the pointer near him (his units, 1 at most): towards it.\n    gaze: Vec2,\n    /// Which plant he is (see `skins.rs`).\n    skin: Skin,\n    /// Changing plant: how far down in the soil (0 out, 1 gone; below 0, popping out bigger).\n    sink: f32,\n    /// The season's outfit he wears: Paloma and Hélio add a touch of their own (see `skins.rs`).\n    feast: Option<Season>,\n}\n"),
+    ("            flower: self.growth.2 >= DAYS_A_FLOWER,\n", "            flower: self.growth.2 >= DAYS_A_FLOWER,\n            gaze: Vec2::ZERO,\n            skin: Skin::Classic,\n            sink: 0.0,\n            feast: None,\n"),
     ("        } else {\n            painter.circle_filled(at(x, y), 2.0 * u, ink);\n",
      "        } else {\n            // Following the pointer near him.\n            painter.circle_filled(at(x + look.gaze.x * 1.4, y + look.gaze.y * 1.1), 2.0 * u, ink);\n"),
 ]:
@@ -335,6 +451,9 @@ reps = [
      "            // trimmed through WM_NCCALCSIZE), and without DWM drawing the frame, DefWindowProc painted\n"
      "            // a classic one over the whole window at each WM_NCACTIVATE (him taking or losing the\n"
      "            // focus): a screen-sized frame around nothing.\n"),
+    # Linux: out of the task bar written before shown, asked again when lost (see the comment put in its place).
+    ('    /// Every window of ours out of the task bar and the pager, on every desktop (asked of the window\n    /// manager once each, when it lists them).\n    pub(super) fn tune_all() {\n        static DONE: std::sync::Mutex<Vec<Window>> = std::sync::Mutex::new(Vec::new());\n        let Some((conn, root)) = x() else { return };\n        let me = std::process::id();\n        let (Some(state), Some(desktop), Some(skip_bar), Some(skip_pager), Some(sticky)) = (atom(conn, "_NET_WM_STATE"), atom(conn, "_NET_WM_DESKTOP"), atom(conn, "_NET_WM_STATE_SKIP_TASKBAR"), atom(conn, "_NET_WM_STATE_SKIP_PAGER"), atom(conn, "_NET_WM_STATE_STICKY")) else { return };\n        let Ok(mut done) = DONE.lock() else { return };\n        let mask = EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY;\n        for w in values(conn, *root, "_NET_CLIENT_LIST") {\n            if done.contains(&w) || values(conn, w, "_NET_WM_PID").first() != Some(&me) {\n                continue;\n            }\n            // 1: add; then the source, a normal application.\n            let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, state, [1, skip_bar, skip_pager, 1, 0]));\n            let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, state, [1, sticky, 0, 1, 0]));\n            let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, desktop, [0xFFFF_FFFF, 1, 0, 0, 0]));\n            done.push(w);\n        }\n        let _ = conn.flush();\n    }\n',
+     '    /// Every window of ours out of the task bar and the pager, above, on every desktop. Written on\n    /// the window while it is not shown yet (the window manager reads it as it takes the window in;\n    /// some docks never look again: a window per screen listed as an open app), then asked of the\n    /// window manager each second for those shown without it (a window hidden then shown loses it).\n    pub(super) fn tune_all() {\n        use std::time::{Duration, Instant};\n\n        use x11rb::protocol::xproto::{MapState, PropMode};\n        use x11rb::wrapper::ConnectionExt as _;\n\n        /// The root\'s children looked at, the listed windows not ours, those asked again, when last.\n        type Seen = (Vec<Window>, Vec<Window>, Vec<Window>, Option<Instant>);\n        static SEEN: std::sync::Mutex<Seen> = std::sync::Mutex::new((Vec::new(), Vec::new(), Vec::new(), None));\n        let Some((conn, root)) = x() else { return };\n        let me = std::process::id();\n        let names = ["_NET_WM_STATE", "_NET_WM_DESKTOP", "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER", "_NET_WM_STATE_STICKY", "_NET_WM_STATE_ABOVE"];\n        let Some([state, desktop, skip_bar, skip_pager, sticky, above]) = names.map(|n| atom(conn, n)).into_iter().collect::<Option<Vec<_>>>().and_then(|v| <[u32; 6]>::try_from(v).ok()) else { return };\n        let Ok(mut seen) = SEEN.lock() else { return };\n        let (children, strangers, asked, last) = &mut *seen;\n        // Ours not shown yet (right under the root: a shown one is in its frame).\n        if let Some(tree) = conn.query_tree(*root).ok().and_then(|c| c.reply().ok()) {\n            children.retain(|w| tree.children.contains(w));\n            for &w in &tree.children {\n                if children.contains(&w) {\n                    continue;\n                }\n                children.push(w);\n                if values(conn, w, "_NET_WM_PID").first() != Some(&me) {\n                    continue;\n                }\n                if conn.get_window_attributes(w).ok().and_then(|c| c.reply().ok()).is_some_and(|a| a.map_state == MapState::UNMAPPED) {\n                    let _ = conn.change_property32(PropMode::REPLACE, w, state, AtomEnum::ATOM, &[skip_bar, skip_pager, above, sticky]);\n                    let _ = conn.change_property32(PropMode::REPLACE, w, desktop, AtomEnum::CARDINAL, &[0xFFFF_FFFF]);\n                }\n            }\n        }\n        // Ours shown without it: asked of the window manager.\n        if last.is_none_or(|t| t.elapsed() >= Duration::from_secs(1)) {\n            *last = Some(Instant::now());\n            let listed = values(conn, *root, "_NET_CLIENT_LIST");\n            strangers.retain(|w| listed.contains(w));\n            let mask = EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY;\n            for w in listed {\n                if strangers.contains(&w) {\n                    continue;\n                }\n                if values(conn, w, "_NET_WM_PID").first() != Some(&me) {\n                    strangers.push(w);\n                    continue;\n                }\n                if values(conn, w, "_NET_WM_STATE").contains(&skip_bar) {\n                    continue;\n                }\n                if !asked.contains(&w) {\n                    asked.push(w);\n                    crate::log::line(&format!("fenêtre {w:#x} dans la barre des tâches : sortie demandée"));\n                }\n                // 1: add; then the source, a normal application.\n                let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, state, [1, skip_bar, skip_pager, 1, 0]));\n                let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, state, [1, sticky, 0, 1, 0]));\n                let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, desktop, [0xFFFF_FFFF, 1, 0, 0, 0]));\n            }\n        }\n        let _ = conn.flush();\n    }\n'),
 ]
 for a, b in reps:
     assert a in oses, a

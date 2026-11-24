@@ -63,6 +63,8 @@ struct Overlay {
     page: Page,
     /// Your name being typed in his bubble (see `Naming`).
     naming: Option<Naming>,
+    /// Asking how you are: his bubble and its thumbs up and down, as last drawn (screen points).
+    mood: Option<[Rect; 3]>,
     /// What the journal last said of the windows (said again when it changes).
     logged: String,
     /// Windows: frames left to clear what stays behind the drawing (see `glass`), after a change
@@ -81,6 +83,9 @@ struct Overlay {
     /// since when.
     entered: bool,
     pop: Option<Instant>,
+    /// Debug builds: the tour of everything he does (see `TOUR`): its step (none: about to start)
+    /// and since when.
+    tour: Option<(Option<usize>, Instant)>,
 }
 
 /// How near the pointer comes for his eyes to follow it (points from his face).
@@ -339,6 +344,7 @@ impl Plant {
             gaze: Vec2::ZERO,
             skin: Skin::Classic,
             sink: 0.0,
+            feast: None,
             wilt: self.wilt(),
         }
     }
@@ -754,6 +760,8 @@ struct Look {
     skin: Skin,
     /// Changing plant: how far down in the soil (0 out, 1 gone; below 0, popping out bigger).
     sink: f32,
+    /// The season's outfit he wears: Paloma and Hélio add a touch of their own (see `skins.rs`).
+    feast: Option<Season>,
 }
 
 fn paint_matheo_as(painter: &egui::Painter, foot: Pos2, size: f32, now: f64, look: Look) {
@@ -1116,9 +1124,84 @@ enum Demo {
     /// Popping out of the bottom of the screen, as he may arrive at the start.
     Pop,
     Say(Own),
+    /// Everything, one after another (see `TOUR`).
+    Tour,
 }
 
-const DEMOS: [(&str, Demo); 21] = [
+/// Debug builds: a step of the tour, besides his demos: how he looks (left as he is after it).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Step {
+    Play(Demo),
+    Wilt(f32),
+    Tired,
+    Shades,
+    Dizzy,
+    Glad,
+    Grown,
+    Flower,
+    Skin(Skin),
+    /// Changing plant (from the next one to his own).
+    Swap,
+    /// The watering can pouring (counted as a watering).
+    Water,
+    /// A season's outfit, on one of his plants (the first time, its words said too).
+    Season(Season, Skin, bool),
+}
+
+/// Debug builds: the tour, `MATHEO_TOUR=1` at the start or « Tout voir » on the demo page: his
+/// demos, then his looks, his plants, his season outfits, each named at the top of his screen.
+fn tour_steps(lang: crate::i18n::Lang) -> Vec<(String, Step)> {
+    let mut steps: Vec<(String, Step)> = DEMOS.iter().filter(|(_, d)| *d != Demo::Tour).map(|(label, d)| ((*label).to_owned(), Step::Play(*d))).collect();
+    steps.extend([
+        ("L’arrosage", Step::Water),
+        ("Content (arrosé)", Step::Glad),
+        ("Soif (1/3)", Step::Wilt(1.0 / 3.0)),
+        ("Soif (2/3)", Step::Wilt(2.0 / 3.0)),
+        ("Dépéri (3/3)", Step::Wilt(1.0)),
+        ("La tête qui tourne", Step::Dizzy),
+        ("Le soir, fatigué", Step::Tired),
+        ("Vendredi aprèm, lunettes de soleil", Step::Shades),
+        ("Grandi (des feuilles en plus)", Step::Grown),
+        ("La fleur du jour (3 arrosages)", Step::Flower),
+        ("Changement d’apparence", Step::Swap),
+    ].map(|(l, st)| (l.to_owned(), st)));
+    steps.extend(Skin::ALL.iter().map(|&k| (format!("Apparence : {}", k.label(lang)), Step::Skin(k))));
+    for season in Season::ALL {
+        for (i, &skin) in Skin::ALL.iter().enumerate() {
+            steps.push((format!("Saison : {} · {}", season.label(), skin.label(lang)), Step::Season(season, skin, i == 0)));
+        }
+    }
+    steps
+}
+
+/// The tour started from a step: the one before it, as if it had begun that long ago (none lasts less).
+const TOUR_BEFORE: Duration = Duration::from_secs(4);
+
+/// How long a step of the tour shows.
+fn tour_lasts(step: Step) -> Duration {
+    match step {
+        Step::Play(Demo::Say(Own::Breathe)) => Own::Breathe.lasts(),
+        Step::Play(Demo::Say(Own::News) | Demo::Hello | Demo::Chute | Demo::Land) => Duration::from_secs(9),
+        Step::Play(_) | Step::Water => Duration::from_secs(6),
+        Step::Season(.., true) => Duration::from_secs(8),
+        _ => Duration::from_secs(4),
+    }
+}
+
+/// Debug builds: `MATHEO_TOUR=1`, the tour at the start; `MATHEO_TOUR=<word>`, from the first step
+/// whose name has it (`MATHEO_TOUR=saison`, the season outfits).
+fn tour_asked() -> Option<String> {
+    cfg!(debug_assertions).then(|| std::env::var("MATHEO_TOUR").ok()).flatten()
+}
+
+/// The step the tour starts from (`tour_asked`).
+fn tour_from(lang: crate::i18n::Lang) -> Option<usize> {
+    let word = tour_asked()?.to_lowercase();
+    tour_steps(lang).iter().position(|(label, _)| label.to_lowercase().contains(&word)).and_then(|k| k.checked_sub(1))
+}
+
+const DEMOS: [(&str, Demo); 26] = [
+    ("Tout voir, l’un après l’autre", Demo::Tour),
     ("Parachute", Demo::Chute),
     ("Arrivée par le bas", Demo::Pop),
     ("Chute et atterrissage", Demo::Land),
@@ -1140,7 +1223,19 @@ const DEMOS: [(&str, Demo); 21] = [
     ("Respirer ensemble", Demo::Say(Own::Breathe)),
     ("Il fait chaud", Demo::Say(Own::Hot)),
     ("Retour après une absence", Demo::Say(Own::Back)),
+    ("Les verres d’eau du jour (le soir)", Demo::Say(Own::Glasses)),
+    ("Ça va aujourd’hui ? (les pouces)", Demo::Say(Own::Mood)),
+    ("Réponse au pouce levé", Demo::Say(Own::MoodUp)),
+    ("Réponse au pouce baissé", Demo::Say(Own::MoodDown)),
 ];
+
+/// Debug builds: the tour's step named at the top of his screen.
+fn paint_tour_caption(painter: &egui::Painter, screen: Rect, caption: &str) {
+    let galley = painter.layout_no_wrap(caption.to_owned(), FontId::proportional(20.0), Color32::WHITE);
+    let r = Rect::from_center_size(Pos2::new(screen.center().x, screen.min.y + 70.0), galley.size() + Vec2::new(36.0, 18.0));
+    painter.rect_filled(r, 12.0, Color32::from_rgba_unmultiplied(30, 32, 40, 220));
+    painter.galley(r.center() - galley.size() / 2.0, galley, Color32::WHITE);
+}
 
 /// Where his menu shows (screen points): from the click, kept within the screen.
 fn menu_rect(at: Pos2, rows: usize, screen: Rect) -> Rect {
@@ -1305,7 +1400,13 @@ pub(crate) fn run(mut settings: Settings) {
                     crate::access::ask();
                 }
             }
-            Ok(Box::new(Overlay { mouse, hot: hot.clone(), settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), antics: Antics::default(), care: Care::new(first, news), page: Page::Main, naming: None, logged: String::new(), glass: GLASS, gaze: Vec2::ZERO, swap: None, can_counted: None, can_away: false, entered: false, pop: None }))
+            // The tour: from its start (a few seconds after his), or from the step asked.
+            let tour = tour_asked().map(|_| match tour_from(settings.lang) {
+                // After his entrance.
+                Some(k) => (Some(k), Instant::now() + Duration::from_secs(3) - TOUR_BEFORE),
+                None => (None, Instant::now()),
+            });
+            Ok(Box::new(Overlay { mouse, hot: hot.clone(), settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), antics: Antics::default(), care: Care::new(first, news), page: Page::Main, naming: None, mood: None, logged: String::new(), glass: GLASS, gaze: Vec2::ZERO, swap: None, can_counted: None, can_away: false, entered: false, pop: None, tour }))
         }),
     );
     match result {
@@ -1338,7 +1439,49 @@ impl Overlay {
             Demo::Advice => m.advise(),
             Demo::Pop => self.pop = Some(now),
             Demo::Say(own) => m.tip = Some((Said::Own(own), now)),
+            Demo::Tour => self.tour = Some((None, now - Duration::from_secs(10))),
         }
+    }
+
+    /// Debug builds: the tour's next step when due (a few seconds after the start first); each
+    /// starts with nothing over him. Its step and its name, while it goes on.
+    fn tour_tick(&mut self) -> Option<(usize, usize, String, Step)> {
+        let (step, since) = self.tour?;
+        let steps = tour_steps(self.settings.lang);
+        let due = match step {
+            None => since.elapsed() >= Duration::from_secs(4),
+            Some(k) => steps.get(k).is_none_or(|(_, st)| since.elapsed() >= tour_lasts(*st)),
+        };
+        let k = match (step, due) {
+            (Some(k), false) => k,
+            _ => {
+                let k = step.map_or(0, |k| k + 1);
+                let Some(&(_, st)) = steps.get(k) else {
+                    self.tour = None;
+                    self.matheo.tip = None;
+                    crate::log::line("visite : finie");
+                    return None;
+                };
+                let now = Instant::now();
+                self.tour = Some((Some(k), now));
+                crate::log::line(&format!("visite : étape {}/{} · {}", k + 1, steps.len(), steps[k].0));
+                let m = &mut self.matheo;
+                m.tip = None;
+                m.can = None;
+                match st {
+                    Step::Play(demo) => self.play(demo),
+                    Step::Water => self.matheo.can = Some((now, Some(now))),
+                    Step::Dizzy => self.matheo.dizzy = Some(now + tour_lasts(st)),
+                    Step::Glad => self.matheo.glad = Some(now + tour_lasts(st)),
+                    Step::Season(k, _, true) => self.matheo.tip = Some((Said::Own(Own::Feast(k, false)), now)),
+                    Step::Swap => self.swap = Some((Skin::ALL[(Skin::ALL.iter().position(|&k| k == self.settings.skin).unwrap_or(0) + 1) % Skin::ALL.len()], now)),
+                    _ => {}
+                }
+                k
+            }
+        };
+        let (label, st) = steps.get(k)?.clone();
+        Some((k + 1, steps.len(), label, st))
     }
 
     /// Asks your name: his bubble with the field to type it in.
@@ -1585,6 +1728,17 @@ impl eframe::App for Overlay {
                     naming.keys = Some(0);
                 }
             }
+        }
+        // Asking how you are: a thumb answers (elsewhere on the bubble closes it, unanswered).
+        if !matches!(self.matheo.tip, Some((Said::Own(Own::Mood), _))) {
+            self.mood = None;
+        }
+        if let (true, Some([_, up, down]), Some(p)) = (pressed, self.mood, mouse.at)
+            && (up.contains(p) || down.contains(p))
+        {
+            on_name = true;
+            self.mood = None;
+            self.matheo.tip = Some((Said::Own(if up.contains(p) { Own::MoodUp } else { Own::MoodDown }), Instant::now()));
         }
         if pressed
             && matches!(self.matheo.tip, Some((Said::Update, _)))
@@ -1853,7 +2007,7 @@ impl eframe::App for Overlay {
             self.matheo.friday = friday();
             self.season = Season::now();
         }
-        self.care.step(&mut self.matheo, self.settings.tips, self.settings.hours, self.settings.name.is_some(), mouse.at);
+        self.care.step(&mut self.matheo, self.settings.tips, self.settings.hours, self.settings.name.is_some(), mouse.at, self.season);
         // His eyes following the pointer near him (back ahead when it goes away), smoothly.
         let to = self.matheo.at.zip(mouse.at).map_or(Vec2::ZERO, |(at, p)| {
             let d = p - (at - Vec2::new(0.0, MATHEO_H * 0.25));
@@ -1903,8 +2057,18 @@ impl eframe::App for Overlay {
         } else {
             self.can_away = false;
         }
+        let tour = self.tour_tick();
         let m = &self.matheo;
         let mut look = Look { gaze: self.gaze, skin: self.settings.skin, ..self.antics.dress(m.look(m.tired.0, m.friday), m) };
+        match tour.as_ref().map(|t| t.3) {
+            Some(Step::Wilt(w)) => look.wilt = w,
+            Some(Step::Tired) => look.tired = true,
+            Some(Step::Shades) => look.shades = true,
+            Some(Step::Grown) => look.extra = 3,
+            Some(Step::Flower) => (look.extra, look.flower) = (3, true),
+            Some(Step::Skin(k) | Step::Season(_, k, _)) => look.skin = k,
+            _ => {}
+        }
         // Changing plant: the one before sinking into the soil, the new one popping out.
         if let Some((before, since)) = self.swap {
             let t = since.elapsed().as_secs_f32();
@@ -1926,20 +2090,28 @@ impl eframe::App for Overlay {
         let swapping = self.swap.map(|(_, since)| since.elapsed().as_secs_f32());
         let can = m.at.zip(m.can).filter(|_| !self.can_away).map(|(at, (since, pour))| can_view(at, can_side(at, &works), since, pour));
         let plant = m.at.map(|at| (at, look));
-        let season = self.season;
+        let season = match tour.as_ref().map(|t| t.3) {
+            Some(Step::Season(k, ..)) => Some(k),
+            _ => self.season,
+        };
+        let tour_caption = tour.map(|(k, of, label, _)| format!("Visite {k}/{of} · {label}"));
+        // His plant's own touch to the outfit.
+        let plant = plant.map(|(at, look)| (at, Look { feast: season, ..look }));
         let antics = &self.antics;
         let mut keys = Vec::new();
         let naming = self.naming.as_ref().map(|n| Naming { typed: n.typed.clone(), keys: n.keys, rects: None });
         let t = self.settings.lang.strings();
         // His words: one of a few at each bubble, with your name now and then.
         let v = self.care.variant(m.tip);
+        let asking_mood = matches!(m.tip, Some((Said::Own(Own::Mood), _)));
         let tip = m.tip.map(|(said, since)| {
             let text = match said {
                 Said::Own(Own::Breathe) => breathe_text(since.elapsed().as_secs_f32(), t, v),
+                Said::Own(Own::Glasses) => glasses_text(glasses_today(&m.growth).max(1), t, v),
                 Said::Own(own) => own.text(t, v).to_owned(),
                 Said::Ouch => pick(t.more_ouch, v).to_owned(),
                 Said::Shaking => pick(t.more_shaking, v).to_owned(),
-                Said::Thanks => pick(t.more_thanks, v).to_owned(),
+                Said::Thanks => thanks_text(glasses_today(&m.growth), t, v),
                 Said::Thirsty => pick(t.more_thirsty, v).to_owned(),
                 _ => said.text(self.settings.lang).to_owned(),
             };
@@ -1957,7 +2129,7 @@ impl eframe::App for Overlay {
         let menu_on = menu.and_then(|m| on(m.center()));
         let pointer_on = mouse.at.and_then(on);
         let gallery = cfg!(debug_assertions) && std::env::var_os("MATHEO_GALLERY").is_some();
-        if menu.is_some() || gallery {
+        if menu.is_some() || gallery || tour_caption.is_some() {
             busy = true;
         }
         // A window over each screen, made once at its size and never moved, drawing what is on its
@@ -2004,7 +2176,7 @@ impl eframe::App for Overlay {
             if keys_here {
                 take_keys(&title);
             }
-            let (bubble, name_rects, typed_keys) = ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("matheo-screen", i)), builder, |ctx, _| {
+            let (bubble, name_rects, typed_keys, mood_rects) = ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("matheo-screen", i)), builder, |ctx, _| {
                 if keys_here {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
@@ -2017,6 +2189,7 @@ impl eframe::App for Overlay {
                 let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("matheo")));
                 let mut bubble = None;
                 let mut name_rects = None;
+                let mut mood_rects = None;
                 let mut typed_keys = Vec::new();
                 if let (Some((at, look)), true) = (plant, his) {
                     // Popping out of the bottom of the screen: drawn lower (where he is stays).
@@ -2040,6 +2213,10 @@ impl eframe::App for Overlay {
                         if n.keys.is_some() {
                             typed_keys = ctx.input(|i| i.events.clone());
                         }
+                    } else if let (true, Some(text)) = (asking_mood, tip.as_deref()) {
+                        let rects = paint_mood_bubble(&painter, at - origin.to_vec2(), text, mouse.at.map(|p| p - origin.to_vec2()), screen.translate(-origin.to_vec2())).map(|r| r.translate(origin.to_vec2()));
+                        bubble = Some(rects[0]);
+                        mood_rects = Some(rects);
                     } else {
                         bubble = tip.as_deref().map(|text| paint_matheo_tip(&painter, at - origin.to_vec2(), text, screen.translate(-origin.to_vec2())).translate(origin.to_vec2()));
                     }
@@ -2048,14 +2225,20 @@ impl eframe::App for Overlay {
                 if let Some(menu) = menu_here {
                     paint_menu(&painter, menu.translate(-origin.to_vec2()), &rows, hover);
                 }
+                if let (Some(caption), true) = (tour_caption.as_deref(), his) {
+                    paint_tour_caption(&painter, screen.translate(-origin.to_vec2()), caption);
+                }
                 if gallery && i == home {
                     paint_matheo_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                     paint_season_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                     paint_skin_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                     paint_antics_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                 }
-                (bubble, name_rects, typed_keys)
+                (bubble, name_rects, typed_keys, mood_rects)
             });
+            if his && mood_rects.is_some() {
+                self.mood = mood_rects;
+            }
             if bubble.is_some() {
                 self.matheo.bubble = bubble;
             }
@@ -2180,6 +2363,15 @@ enum Own {
     Again,
     /// The first start of a new version: what's new in it (in place of hello again).
     News,
+    /// The evening: the glasses of water of the day (see `glasses_text`).
+    Glasses,
+    /// Some days: how are you? A thumb up or down in his bubble (see `mood_due`), and his answer.
+    Mood,
+    MoodUp,
+    MoodDown,
+    /// His season's outfit on: a word of the feast (on the day itself, for Christmas), now and then
+    /// (see `feast_due`).
+    Feast(Season, bool),
 }
 
 impl Own {
@@ -2201,6 +2393,16 @@ impl Own {
             Own::Named => t.matheo_named,
             Own::Again => t.matheo_again,
             Own::News => t.matheo_news,
+            Own::Glasses => t.matheo_glasses_good,
+            Own::Mood => t.matheo_mood,
+            Own::MoodUp => t.matheo_mood_up,
+            Own::MoodDown => t.matheo_mood_down,
+            Own::Feast(Season::Christmas, false) => t.matheo_christmas_soon,
+            Own::Feast(Season::Christmas, true) => t.matheo_christmas,
+            Own::Feast(Season::NewYear, _) => t.matheo_new_year,
+            Own::Feast(Season::Valentine, _) => t.matheo_valentine,
+            Own::Feast(Season::Easter, _) => t.matheo_easter,
+            Own::Feast(Season::Halloween, _) => t.matheo_halloween,
         }
     }
 
@@ -2216,6 +2418,8 @@ impl Own {
             Own::News => Duration::from_secs(15),
             Own::AskName => Duration::from_secs(60),
             Own::Breathe => BREATHE_LASTS,
+            Own::Mood => Duration::from_secs(90),
+            Own::MoodUp | Own::MoodDown => Duration::from_secs(12),
             _ => TIP_SHOWN,
         }
     }
@@ -2226,6 +2430,8 @@ impl Own {
 const CARE_FIRST: Duration = Duration::from_secs(25 * 60);
 const CARE_EVERY: Duration = Duration::from_secs(40 * 60);
 const CARE_GAP: Duration = Duration::from_secs(8 * 60);
+/// How you are, the glasses of water of the day: asked, said that long after any other bubble.
+const QUIET_GAP: Duration = Duration::from_secs(2 * 60);
 /// Away that long (the pointer still, the computer asleep): glad to see you back.
 const AWAY_LONG: Duration = Duration::from_secs(3600);
 /// Your name asked that long after his start (after his hello).
@@ -2323,7 +2529,7 @@ impl Care {
     /// Each frame, after his own advice: says what is due, if his advice is on, he isn't quiet, nor
     /// held, someone is at the screen and no other bubble shows (his advice can give way to his
     /// hours).
-    fn step(&mut self, plant: &mut Plant, tips: bool, hours: crate::settings::Hours, named: bool, mouse: Option<Pos2>) {
+    fn step(&mut self, plant: &mut Plant, tips: bool, hours: crate::settings::Hours, named: bool, mouse: Option<Pos2>, season: Option<Season>) {
         let moment = Instant::now();
         let wall = std::time::SystemTime::now();
         let mut back = false;
@@ -2371,6 +2577,25 @@ impl Care {
             plant.tip = Some((Said::Own(own), moment));
             return;
         }
+        let calm = plant.tip.is_none() && (self.bubble.elapsed() >= QUIET_GAP || care_forced());
+        // His season's outfit on: a word of the feast, once on the days it's due.
+        if calm && let Some(feast) = feast_due(now, season, &self.said.1) {
+            self.said.1.push(feast);
+            plant.tip = Some((Said::Own(feast), moment));
+            return;
+        }
+        // Some days, in the day: how are you? Once.
+        if calm && mood_due(now, &self.said.1) {
+            self.said.1.push(Own::Mood);
+            plant.tip = Some((Said::Own(Own::Mood), moment));
+            return;
+        }
+        // The evening (from the end of the day on): the glasses of water of the day, once.
+        if calm && glasses_due(now, hours, glasses_today(&plant.growth), &self.said.1) {
+            self.said.1.push(Own::Glasses);
+            plant.tip = Some((Said::Own(Own::Glasses), moment));
+            return;
+        }
         if plant.tip.is_none() && moment >= self.next && (self.bubble.elapsed() >= CARE_GAP || care_forced()) {
             use chrono::Datelike;
             let list: &[Own] = if (6..=8).contains(&now.month()) { &[Own::Eyes, Own::Hot, Own::Posture, Own::Breathe] } else { &[Own::Eyes, Own::Posture, Own::Breathe] };
@@ -2380,6 +2605,64 @@ impl Care {
             plant.tip = Some((Said::Own(own), moment));
         }
     }
+}
+
+/// Glasses of water today: his waterings today (each with a reminder to drink a glass, then water
+/// him).
+fn glasses_today(growth: &(String, u32, u32)) -> u32 {
+    if growth.0 == chrono::Local::now().format("%Y-%m-%d").to_string() { growth.1 } else { 0 }
+}
+
+/// The glasses of water of the day due at `now`: some drunk, the end of the day (`hours`' last, on or
+/// off) past, not said yet today.
+fn glasses_due(now: chrono::NaiveDateTime, hours: crate::settings::Hours, glasses: u32, said: &[Own]) -> bool {
+    use chrono::Timelike;
+    glasses > 0 && now.hour() * 60 + now.minute() >= hours.at[3] && !said.contains(&Own::Glasses)
+}
+
+/// Asking how you are due at `now`: two days in five (the same all day long, picked from the date),
+/// from a time of the day's own between 10:30 and 15:30 until 5 pm; once.
+fn mood_due(now: chrono::NaiveDateTime, said: &[Own]) -> bool {
+    use chrono::{Datelike, Timelike};
+    let h = (now.date().num_days_from_ce() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    let h = h ^ (h >> 29);
+    let from = 10 * 60 + 30 + ((h >> 8) % (5 * 60)) as u32;
+    h % 5 < 2 && (from..17 * 60).contains(&(now.hour() * 60 + now.minute())) && !said.contains(&Own::Mood)
+}
+
+/// A word of the feast due at `now`, `season`'s outfit on: between 9 am and 8 pm, once; a day in two
+/// for the long ones (Christmas, Halloween) but on their days (December 24 and 25, October 31), every
+/// day for the others.
+fn feast_due(now: chrono::NaiveDateTime, season: Option<Season>, said: &[Own]) -> Option<Own> {
+    use chrono::{Datelike, Timelike};
+    let season = season?;
+    let (m, d) = (now.month(), now.day());
+    let day = matches!((season, m, d), (Season::Christmas, 12, 24..=25) | (Season::Halloween, 10, 31));
+    let long = matches!(season, Season::Christmas | Season::Halloween);
+    let today = day || !long || now.date().num_days_from_ce() % 2 == 0;
+    let said_already = said.iter().any(|o| matches!(o, Own::Feast(..)));
+    (today && (9..20).contains(&now.hour()) && !said_already).then_some(Own::Feast(season, season == Season::Christmas && day))
+}
+
+/// « 3 glasses of water ».
+fn glasses_said(n: u32, t: &'static crate::i18n::Strings) -> String {
+    (if n == 1 { t.glass_one } else { t.glass_many }).replace("{n}", &n.to_string())
+}
+
+/// The evening's words on the `n` glasses of water of the day (number `v`).
+fn glasses_text(n: u32, t: &'static crate::i18n::Strings, v: usize) -> String {
+    let list = match n {
+        0..=2 => t.matheo_glasses_few,
+        3..=5 => t.matheo_glasses_good,
+        _ => t.matheo_glasses_lots,
+    };
+    pick(list, v).replace("{glasses}", &glasses_said(n, t))
+}
+
+/// Thanks for watering him (words number `v`), and the glasses of water of the day, `n` with this one.
+fn thanks_text(n: u32, t: &'static crate::i18n::Strings, v: usize) -> String {
+    let count = if n <= 1 { t.thanks_glass_first.to_owned() } else { t.thanks_glass_more.replace("{glasses}", &glasses_said(n, t)) };
+    format!("{}\n{count}", pick(t.more_thanks, v))
 }
 
 /// Words number `v` among `list` (any number: taken in turn).
@@ -2500,6 +2783,61 @@ mod care_tests {
     }
 
     #[test]
+    fn the_glasses_of_water_in_the_evening_once() {
+        use super::{glasses_due, glasses_text, personal, thanks_text, Said};
+        let hours = Hours::default();
+        assert!(!glasses_due(at(17, 17, 59), hours, 4, &[]), "before the end of the day");
+        assert!(glasses_due(at(17, 18, 0), hours, 4, &[]));
+        assert!(glasses_due(at(21, 22, 30), Hours { on: false, ..hours }, 1, &[]), "his hours off, the weekend: still");
+        assert!(!glasses_due(at(17, 19, 0), hours, 0, &[]), "none drunk: nothing said");
+        assert!(!glasses_due(at(17, 19, 0), hours, 4, &[Own::Glasses]), "said once");
+        let t = crate::i18n::Lang::Fr.strings();
+        assert_eq!(personal(Said::Own(Own::Glasses), &glasses_text(1, t, 0), None, t), "Petit bilan du jour : 1 verre d’eau. Demain, on en boit un de plus ?");
+        assert_eq!(personal(Said::Own(Own::Glasses), &glasses_text(4, t, 0), Some("Julie"), t), "Bilan du jour : 4 verres d’eau, bien joué Julie ! Toi et mes racines, on est bien hydratés.");
+        assert_eq!(personal(Said::Own(Own::Glasses), &glasses_text(4, t, 0), None, t), "Bilan du jour : 4 verres d’eau, bien joué ! Toi et mes racines, on est bien hydratés.");
+        assert_eq!(glasses_text(7, t, 1), "Record ! 7 verres d’eau aujourd’hui. Je suis fier de toi.");
+        assert!(thanks_text(1, t, 0).ends_with("\nPremier verre d’eau de la journée !"));
+        assert!(thanks_text(3, t, 0).ends_with("\nEt de 3 verres d’eau aujourd’hui !"));
+        let en = crate::i18n::Lang::En.strings();
+        assert!(thanks_text(2, en, 0).ends_with("\nThat’s 2 glasses of water today!"));
+    }
+
+    #[test]
+    fn a_word_of_the_feast_now_and_then() {
+        use super::{Season, feast_due};
+        let day = |m, d, h| NaiveDate::from_ymd_opt(2026, m, d).unwrap().and_hms_opt(h, 0, 0).unwrap();
+        assert_eq!(feast_due(day(12, 24, 10), Some(Season::Christmas), &[]), Some(Own::Feast(Season::Christmas, true)));
+        assert_eq!(feast_due(day(12, 25, 19), Some(Season::Christmas), &[]), Some(Own::Feast(Season::Christmas, true)));
+        assert_eq!(feast_due(day(12, 24, 8), Some(Season::Christmas), &[]), None, "too early");
+        assert_eq!(feast_due(day(12, 24, 10), Some(Season::Christmas), &[Own::Feast(Season::Christmas, true)]), None, "once");
+        assert_eq!(feast_due(day(12, 24, 10), None, &[]), None, "no outfit");
+        // Before Christmas, a day in two, its words before the day.
+        let said: Vec<Option<Own>> = (1..=23).map(|d| feast_due(day(12, d, 10), Some(Season::Christmas), &[])).collect();
+        assert!(said.windows(2).all(|w| w[0].is_some() != w[1].is_some()), "{said:?}");
+        assert!(said.iter().flatten().all(|o| *o == Own::Feast(Season::Christmas, false)));
+        assert!(feast_due(day(10, 31, 10), Some(Season::Halloween), &[]).is_some());
+        assert!((1..=2).all(|d| feast_due(day(1, d, 10), Some(Season::NewYear), &[]).is_some()), "every day");
+        assert!(feast_due(day(2, 14, 12), Some(Season::Valentine), &[]).is_some());
+    }
+
+    #[test]
+    fn how_are_you_some_days_once() {
+        use super::mood_due;
+        let mut days = 0;
+        for d in 0..200 {
+            let date = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap() + chrono::Days::new(d);
+            let asked: Vec<u32> = (0..24 * 60).filter(|m| mood_due(date.and_hms_opt(m / 60, m % 60, 0).unwrap(), &[])).collect();
+            if let Some(&first) = asked.first() {
+                days += 1;
+                assert!((10 * 60 + 30..15 * 60 + 30).contains(&first), "{date}: from {first}");
+                assert_eq!(asked.last(), Some(&(17 * 60 - 1)), "{date}: until 5 pm");
+                assert!(!mood_due(date.and_hms_opt(16, 59, 0).unwrap(), &[Own::Mood]), "once");
+            }
+        }
+        assert!((60..100).contains(&days), "{days} days in 200");
+    }
+
+    #[test]
     fn his_hours_as_set_in_his_menu() {
         let mut hours = Hours::default();
         hours.shift(1, 30);
@@ -2515,7 +2853,7 @@ mod care_tests {
 
     #[test]
     fn his_words_with_your_name_or_without() {
-        use super::{Said, personal};
+        use super::{Said, Season, glasses_text, personal, thanks_text};
         let t = crate::i18n::Lang::Fr.strings();
         let back = Said::Own(Own::Back);
         assert_eq!(personal(back, Own::Back.text(t, 0), Some("Julie"), t), "Te revoilà, Julie ! Tu m’as manqué.");
@@ -2525,13 +2863,21 @@ mod care_tests {
         assert_eq!(personal(Said::Tip(4), "Bois.", Some("Julie"), t), "Bois.");
         for lang in crate::i18n::Lang::ALL {
             let t = lang.strings();
-            let all = [Own::Clock(0), Own::Clock(1), Own::Clock(3), Own::Monday, Own::Lamp, Own::Weekend, Own::Eyes, Own::Posture, Own::Breathe, Own::Hot, Own::Back, Own::AskName, Own::Again, Own::News];
+            let all = [Own::Clock(0), Own::Clock(1), Own::Clock(3), Own::Monday, Own::Lamp, Own::Weekend, Own::Eyes, Own::Posture, Own::Breathe, Own::Hot, Own::Back, Own::AskName, Own::Again, Own::News, Own::Mood, Own::MoodUp, Own::MoodDown, Own::Feast(Season::Christmas, false), Own::Feast(Season::Christmas, true), Own::Feast(Season::NewYear, false), Own::Feast(Season::Valentine, false), Own::Feast(Season::Easter, false), Own::Feast(Season::Halloween, false)];
             // (`Named` only with a name.)
             for own in all {
                 assert!(!own.texts(t).is_empty(), "{own:?}");
                 for v in 0..own.texts(t).len() {
                     let text = personal(Said::Own(own), own.text(t, v), None, t);
                     assert!(!text.contains('{') && !text.contains(" ,") && !text.starts_with(' '), "{own:?} {v}: {text}");
+                }
+            }
+            for n in 0..10 {
+                for v in 0..4 {
+                    for text in [glasses_text(n, t, v), thanks_text(n, t, v)] {
+                        let text = personal(Said::Own(Own::Glasses), &text, None, t);
+                        assert!(!text.contains('{') && !text.contains("  ") && !text.contains(" ,"), "{text}");
+                    }
                 }
             }
             for list in [t.more_ouch, t.more_shaking, t.more_thanks, t.more_thirsty, t.breathe_done] {
@@ -2541,6 +2887,22 @@ mod care_tests {
             }
         }
     }
+}
+
+/// Asking how you are: his bubble (as `paint_matheo_tip` draws it, `question` on top) with a thumb up
+/// and a thumb down under it, the one under the pointer (`hover`) lit. The bubble, the two thumbs.
+fn paint_mood_bubble(painter: &egui::Painter, foot: Pos2, question: &str, hover: Option<Pos2>, bounds: Rect) -> [Rect; 3] {
+    let r = paint_matheo_tip(painter, foot, &format!("{question}\n\n\n"), bounds);
+    let size = Vec2::new(58.0, 30.0);
+    let y = r.max.y - 10.0 - size.y;
+    let up = Rect::from_min_size(Pos2::new(r.center().x - size.x - 7.0, y), size);
+    let down = Rect::from_min_size(Pos2::new(r.center().x + 7.0, y), size);
+    for (b, thumb, fill, lit) in [(up, "👍", Color32::from_rgb(76, 160, 70), Color32::from_rgb(92, 182, 84)), (down, "👎", Color32::from_rgb(214, 138, 74), Color32::from_rgb(232, 156, 90))] {
+        let on = hover.is_some_and(|p| b.contains(p));
+        painter.rect_filled(if on { b.expand(1.5) } else { b }, 15.0, if on { lit } else { fill });
+        painter.text(b.center() + Vec2::new(0.0, 1.0), egui::Align2::CENTER_CENTER, thumb, FontId::proportional(18.0), Color32::WHITE);
+    }
+    [r, up, down]
 }
 
 /// Asking your name: his bubble (as `paint_matheo_tip` draws it, `question` on top) with a field to
@@ -2577,7 +2939,7 @@ fn paint_name_bubble(painter: &egui::Painter, foot: Pos2, question: &str, typed:
 }
 
 /// A season's outfit, Mathéo's own (Ronnie's Mathéo has none): put on over his drawing.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Season {
     /// December 1 to 25: a Santa hat, snow falling.
     Christmas,
@@ -2971,6 +3333,9 @@ fn paint_cactus(painter: &egui::Painter, look: Look, now: f64, u: f32, up: &dyn 
         drop_at(painter, p(-4.0, h * 0.5), u);
         drop_at(painter, p(5.0, h * 0.78), u);
     }
+    if let Some(season) = look.feast {
+        paint_cactus_feast(painter, season, &p, &arms, h, u, t);
+    }
     // Watered well today: a pink flower on top.
     if look.flower {
         let c = Vec2::new(0.0, h + 0.5);
@@ -3037,6 +3402,155 @@ fn paint_sunflower(painter: &egui::Painter, look: Look, now: f64, u: f32, up: &d
         }
     }
     sunflower_head(painter, look, up, main[main.len() - 1], 1.0, face, u);
+    if let Some(season) = look.feast {
+        paint_sunflower_feast(painter, season, up, main[main.len() - 1], 1.0 - 0.3 * look.hide, u, t);
+    }
+}
+
+/// Paloma's touch to the season's outfit (over the one on the pot): a striped scarf at Christmas, a
+/// gold star on top for the New Year, a heart on top on Valentine's Day, an egg in her raised arm at
+/// Easter, a little pumpkin on top at Halloween. `p` places a point of her (her units, upwards from
+/// the soil, as she leans), `h` her height.
+fn paint_cactus_feast(painter: &egui::Painter, season: Season, p: &dyn Fn(f32, f32) -> Pos2, arms: &[Vec<Pos2>], h: f32, u: f32, t: f32) {
+    let top = p(0.0, h);
+    match season {
+        Season::Christmas => {
+            // Wound round under her top, its end hanging down her side.
+            let y = h - 11.5;
+            let red = Color32::from_rgb(206, 32, 44);
+            let white = Color32::from_rgb(250, 250, 248);
+            painter.add(egui::Shape::convex_polygon(vec![p(-10.8, y - 2.4), p(10.8, y - 2.4), p(10.8, y + 2.4), p(-10.8, y + 2.4)], red, Stroke::new(0.7 * u, Color32::from_rgb(140, 16, 26))));
+            for x in [-6.0f32, 0.0, 6.0] {
+                painter.line_segment([p(x, y - 2.2), p(x, y + 2.2)], Stroke::new(1.4 * u, white));
+            }
+            let sway = (t * 1.5).sin() * 0.8;
+            painter.add(egui::Shape::convex_polygon(vec![p(4.0, y - 1.5), p(8.5, y - 1.5), p(9.5 + sway, y - 12.0), p(5.0 + sway, y - 12.0)], red, Stroke::new(0.7 * u, Color32::from_rgb(140, 16, 26))));
+            painter.line_segment([p(5.2 + sway, y - 9.0), p(9.3 + sway, y - 9.0)], Stroke::new(1.4 * u, white));
+        }
+        Season::NewYear => {
+            // A gold star, turning slowly, twinkling.
+            let c = top + Vec2::new(0.0, -6.0 * u);
+            let gold = Color32::from_rgb(250, 204, 50);
+            let r = (5.2 + (t * 3.0).sin() * 0.4) * u;
+            let point = |i: usize, rad: f32| c + Vec2::angled(t * 0.6 - std::f32::consts::FRAC_PI_2 + i as f32 * std::f32::consts::TAU / 10.0) * rad;
+            for i in (0..10).step_by(2) {
+                painter.add(egui::Shape::convex_polygon(vec![point(i, r), point(i + 1, r * 0.45), c, point(i + 9, r * 0.45)], gold, Stroke::NONE));
+            }
+            painter.circle_filled(c, r * 0.45, gold);
+        }
+        Season::Valentine => {
+            // A heart on her top, beating.
+            let beat = 1.0 + ((t * 4.0).sin().max(0.0)).powi(4) * 0.18;
+            heart(painter, top + Vec2::new(0.0, -4.0 * u), 4.8 * u * beat, Color32::from_rgb(226, 36, 78));
+        }
+        Season::Easter => {
+            // An egg held up in her first arm.
+            if let Some(&end) = arms.first().and_then(|a| a.last()) {
+                easter_egg(painter, end + Vec2::new(0.0, -6.5 * u), 0.75 * u, Color32::from_rgb(250, 190, 210));
+            }
+        }
+        Season::Halloween => {
+            // A little pumpkin on her top, its face lit.
+            let c = top + Vec2::new(0.0, -4.0 * u);
+            let orange = Color32::from_rgb(240, 130, 30);
+            let edge = Stroke::new(0.7 * u, Color32::from_rgb(170, 80, 10));
+            for dx in [-2.6f32, 2.6, 0.0] {
+                painter.add(egui::Shape::ellipse_filled(c + Vec2::new(dx, 0.0) * u, Vec2::new(3.6, 4.0) * u, orange));
+                painter.add(egui::Shape::ellipse_stroke(c + Vec2::new(dx, 0.0) * u, Vec2::new(3.6, 4.0) * u, edge));
+            }
+            painter.line_segment([c + Vec2::new(0.0, -3.6) * u, c + Vec2::new(0.8, -6.0) * u], Stroke::new(1.4 * u, Color32::from_rgb(80, 110, 40)));
+            let glow = Color32::from_rgb(255, 226, 90);
+            for s in [-1.0f32, 1.0] {
+                painter.add(egui::Shape::convex_polygon(vec![c + Vec2::new(s * 1.0, -0.4) * u, c + Vec2::new(s * 2.6, -0.4) * u, c + Vec2::new(s * 1.8, -1.8) * u], glow, Stroke::NONE));
+            }
+            painter.add(egui::Shape::convex_polygon(vec![c + Vec2::new(-2.2, 1.0) * u, c + Vec2::new(2.2, 1.0) * u, c + Vec2::new(0.0, 2.4) * u], glow, Stroke::NONE));
+        }
+    }
+}
+
+/// Hélio's touch to the season's outfit (over the one on the pot): a little Santa hat on his head at
+/// Christmas, a gold crown for the New Year, his heart a red heart on Valentine's Day, a chick on his
+/// head at Easter, a spider hanging from his head at Halloween. `c` his head's centre (his units,
+/// upwards), `k` its size.
+fn paint_sunflower_feast(painter: &egui::Painter, season: Season, up: &dyn Fn(Vec2) -> Pos2, c: Vec2, k: f32, u: f32, t: f32) {
+    let at = |x: f32, y: f32| up(c + Vec2::new(x, y) * k);
+    let poly = |points: &[(f32, f32)], fill: Color32, edge: Stroke| {
+        painter.add(egui::Shape::convex_polygon(points.iter().map(|&(x, y)| at(x, y)).collect(), fill, edge));
+    };
+    match season {
+        Season::Christmas => {
+            let red = Color32::from_rgb(206, 32, 44);
+            let edge = Stroke::new(0.8 * u, Color32::from_rgb(140, 16, 26));
+            poly(&[(-8.0, 13.0), (8.0, 13.0), (5.0, 22.0), (-1.0, 25.0)], red, edge);
+            // (Its three points never in a line: a flat triangle drew huge shapes over the screen.)
+            poly(&[(-1.0, 25.0), (5.0, 22.0), (12.0, 17.0)], red, edge);
+            let fur = Color32::from_rgb(250, 250, 248);
+            let soft = Stroke::new(0.7 * u, Color32::from_rgb(200, 200, 205));
+            poly(&[(-9.5, 11.0), (9.5, 11.0), (9.5, 15.0), (-9.5, 15.0)], fur, soft);
+            painter.circle_filled(at(12.0, 17.0), 2.4 * k * u, fur);
+            painter.circle_stroke(at(12.0, 17.0), 2.4 * k * u, soft);
+        }
+        Season::NewYear => {
+            let gold = Color32::from_rgb(244, 196, 48);
+            let edge = Stroke::new(0.8 * u, Color32::from_rgb(190, 140, 20));
+            poly(&[(-8.0, 13.0), (8.0, 13.0), (8.0, 17.0), (-8.0, 17.0)], gold, edge);
+            for x in [-6.0f32, 0.0, 6.0] {
+                poly(&[(x - 2.6, 16.5), (x + 2.6, 16.5), (x, 23.0)], gold, edge);
+            }
+            for (x, color) in [(-6.0f32, Color32::from_rgb(60, 170, 230)), (0.0, Color32::from_rgb(230, 50, 80)), (6.0, Color32::from_rgb(120, 200, 90))] {
+                painter.circle_filled(at(x, 15.0), 1.2 * k * u, color);
+            }
+        }
+        Season::Valentine => {
+            let beat = 1.0 + ((t * 4.0).sin().max(0.0)).powi(4) * 0.18;
+            heart(painter, at(0.0, 0.0) + Vec2::new(0.0, -0.8 * u), 6.0 * k * u * beat, Color32::from_rgb(226, 36, 78));
+        }
+        Season::Easter => {
+            // A chick sitting on his head, looking about now and then.
+            let yellow = Color32::from_rgb(252, 222, 70);
+            let edge = Stroke::new(0.7 * u, Color32::from_rgb(210, 170, 30));
+            let look = if (t % 4.0) < 2.0 { 1.0 } else { -1.0 };
+            let body = at(0.0, 18.5);
+            painter.circle_filled(body, 4.6 * k * u, yellow);
+            painter.circle_stroke(body, 4.6 * k * u, edge);
+            let head = at(look * 2.4, 23.5);
+            painter.circle_filled(head, 3.0 * k * u, yellow);
+            painter.circle_stroke(head, 3.0 * k * u, edge);
+            painter.circle_filled(head + Vec2::new(look * 1.0, -0.6) * k * u, 0.6 * k * u, Color32::from_rgb(40, 30, 20));
+            painter.add(egui::Shape::convex_polygon(vec![head + Vec2::new(look * 2.4, -0.6) * k * u, head + Vec2::new(look * 4.6, 0.2) * k * u, head + Vec2::new(look * 2.4, 0.9) * k * u], Color32::from_rgb(244, 140, 40), Stroke::NONE));
+        }
+        Season::Halloween => {
+            // A spider on its thread, from the tip of his petals on the left, going up and down.
+            let from = at(-15.0, 2.0);
+            let to = from + Vec2::new(0.0, (16.0 + (t * 1.3).sin() * 5.0) * u);
+            painter.line_segment([from, to], Stroke::new(0.6 * u, Color32::from_rgb(225, 225, 235)));
+            let black = Color32::from_rgb(30, 22, 36);
+            for s in [-1.0f32, 1.0] {
+                for (i, a) in [-0.6f32, 0.0, 0.6, 1.1].into_iter().enumerate() {
+                    let wiggle = (t * 6.0 + i as f32).sin() * 0.25;
+                    let knee = to + Vec2::new(s * 3.8, -2.0 + a * 2.6) * u;
+                    painter.line_segment([to, knee], Stroke::new(0.8 * u, black));
+                    painter.line_segment([knee, knee + Vec2::new(s * 1.6, 2.4 + wiggle) * u], Stroke::new(0.8 * u, black));
+                }
+            }
+            painter.circle_filled(to + Vec2::new(0.0, 1.6 * u), 3.0 * u, black);
+            painter.circle_filled(to - Vec2::new(0.0, 1.2 * u), 2.0 * u, black);
+            painter.circle_filled(to + Vec2::new(-0.8, -1.5) * u, 0.5 * u, Color32::WHITE);
+            painter.circle_filled(to + Vec2::new(0.8, -1.5) * u, 0.5 * u, Color32::WHITE);
+        }
+    }
+}
+
+/// An Easter egg at `c`, `s` its size (1: about 10 points by 13), pale `color` with a pink zigzag
+/// and yellow dots.
+fn easter_egg(painter: &egui::Painter, c: Pos2, s: f32, color: Color32) {
+    let egg: Vec<Pos2> = (0..24).map(|i| { let a = i as f32 / 24.0 * std::f32::consts::TAU; c + Vec2::new(5.0 * a.cos(), 6.5 * a.sin() * if a.sin() < 0.0 { 1.12 } else { 1.0 }) * s }).collect();
+    painter.add(egui::Shape::convex_polygon(egg, color, Stroke::new(0.8 * s, Color32::from_rgb(200, 130, 160))));
+    let zig: Vec<Pos2> = (0..=6).map(|i| c + Vec2::new(-4.6 + i as f32 * 1.53, if i % 2 == 0 { -1.0 } else { 1.2 }) * s).collect();
+    painter.add(egui::Shape::line(zig, Stroke::new(1.2 * s, Color32::from_rgb(150, 110, 220))));
+    for d in [Vec2::new(-1.8, 3.4), Vec2::new(1.8, 3.4), Vec2::new(0.0, -4.0)] {
+        painter.circle_filled(c + d * s, 0.9 * s, Color32::from_rgb(250, 220, 80));
+    }
 }
 
 /// A sunflower's head at `c` (his units, upwards), `scale` its size: two rings of petals (hanging
@@ -3219,6 +3733,49 @@ mod skin_tests {
         assert!((0..60).any(|k| swap_at(SINKS + POPS * k as f32 / 60.0).is_some_and(|(_, sink)| sink < -0.05)));
         assert!(swap_at(SINKS + POPS - 0.001).is_some_and(|(_, sink)| sink.abs() < 0.02));
         assert_eq!(swap_at(SINKS + POPS), None);
+    }
+
+    /// Every plant, in every outfit, every way he may be (tipped over, squashed, hopping, hiding,
+    /// wilted, held, sinking): nothing drawn far from him (a stray point made a shape cover the screen).
+    #[test]
+    fn what_he_wears_stays_on_him() {
+        use super::{Look, Season, paint_chute, paint_matheo_as, paint_season};
+        let ctx = egui::Context::default();
+        let foot = egui::Pos2::new(500.0, 500.0);
+        let mut looks = vec![Look::default()];
+        for tilt in [-3.0f32, -1.2, -0.4, 0.4, 1.2, 3.0] {
+            looks.push(Look { tilt, ..Look::default() });
+        }
+        for (squash, hop, hide, wilt, sink) in [(0.3f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32), (-0.2, 20.0, 0.0, 0.0, 0.0), (0.0, 0.0, 1.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 0.0, 0.6), (0.0, 0.0, 0.0, 0.0, -0.1)] {
+            looks.push(Look { squash, hop, hide, wilt, sink, ..Look::default() });
+        }
+        looks.push(Look { held: true, wave: 1.0, extra: 3, flower: true, tired: true, glad: true, gaze: egui::Vec2::new(1.0, -1.0), ..Look::default() });
+        for skin in Skin::ALL {
+            for season in Season::ALL {
+                for (i, look) in looks.iter().enumerate() {
+                    let look = Look { skin, feast: Some(season), ..*look };
+                    for (now, open) in [(0.0, 0.0), (0.7, 0.05), (1.9, 0.3), (3.3, 1.0), (4.1, 1.08)] {
+                        let mut out = ctx.run_ui(Default::default(), |ui| {
+                            let painter = ui.ctx().layer_painter(egui::LayerId::background());
+                            paint_chute(&painter, foot, 1.0, look, open);
+                            paint_matheo_as(&painter, foot, 70.0, now, look);
+                            paint_season(&painter, foot, 70.0, now, look, season);
+                        });
+                        out.textures_delta.clear();
+                        // What is really drawn: the triangles, feathered edges and all.
+                        for shape in out.shapes {
+                            for prim in ctx.tessellate(vec![shape.clone()], 2.0) {
+                                if let egui::epaint::Primitive::Mesh(mesh) = prim.primitive {
+                                    for v in &mesh.vertices {
+                                        assert!(v.pos.is_finite() && (v.pos - foot).length() < 260.0, "{skin:?} {season:?} look {i} at {now}, open {open}: {:?} in {:?}", v.pos, shape.shape);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -4270,24 +4827,68 @@ mod os {
 
     pub(super) fn tune(_cc: &eframe::CreationContext<'_>) {}
 
-    /// Every window of ours out of the task bar and the pager, on every desktop (asked of the window
-    /// manager once each, when it lists them).
+    /// Every window of ours out of the task bar and the pager, above, on every desktop. Written on
+    /// the window while it is not shown yet (the window manager reads it as it takes the window in;
+    /// some docks never look again: a window per screen listed as an open app), then asked of the
+    /// window manager each second for those shown without it (a window hidden then shown loses it).
     pub(super) fn tune_all() {
-        static DONE: std::sync::Mutex<Vec<Window>> = std::sync::Mutex::new(Vec::new());
+        use std::time::{Duration, Instant};
+
+        use x11rb::protocol::xproto::{MapState, PropMode};
+        use x11rb::wrapper::ConnectionExt as _;
+
+        /// The root's children looked at, the listed windows not ours, those asked again, when last.
+        type Seen = (Vec<Window>, Vec<Window>, Vec<Window>, Option<Instant>);
+        static SEEN: std::sync::Mutex<Seen> = std::sync::Mutex::new((Vec::new(), Vec::new(), Vec::new(), None));
         let Some((conn, root)) = x() else { return };
         let me = std::process::id();
-        let (Some(state), Some(desktop), Some(skip_bar), Some(skip_pager), Some(sticky)) = (atom(conn, "_NET_WM_STATE"), atom(conn, "_NET_WM_DESKTOP"), atom(conn, "_NET_WM_STATE_SKIP_TASKBAR"), atom(conn, "_NET_WM_STATE_SKIP_PAGER"), atom(conn, "_NET_WM_STATE_STICKY")) else { return };
-        let Ok(mut done) = DONE.lock() else { return };
-        let mask = EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY;
-        for w in values(conn, *root, "_NET_CLIENT_LIST") {
-            if done.contains(&w) || values(conn, w, "_NET_WM_PID").first() != Some(&me) {
-                continue;
+        let names = ["_NET_WM_STATE", "_NET_WM_DESKTOP", "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER", "_NET_WM_STATE_STICKY", "_NET_WM_STATE_ABOVE"];
+        let Some([state, desktop, skip_bar, skip_pager, sticky, above]) = names.map(|n| atom(conn, n)).into_iter().collect::<Option<Vec<_>>>().and_then(|v| <[u32; 6]>::try_from(v).ok()) else { return };
+        let Ok(mut seen) = SEEN.lock() else { return };
+        let (children, strangers, asked, last) = &mut *seen;
+        // Ours not shown yet (right under the root: a shown one is in its frame).
+        if let Some(tree) = conn.query_tree(*root).ok().and_then(|c| c.reply().ok()) {
+            children.retain(|w| tree.children.contains(w));
+            for &w in &tree.children {
+                if children.contains(&w) {
+                    continue;
+                }
+                children.push(w);
+                if values(conn, w, "_NET_WM_PID").first() != Some(&me) {
+                    continue;
+                }
+                if conn.get_window_attributes(w).ok().and_then(|c| c.reply().ok()).is_some_and(|a| a.map_state == MapState::UNMAPPED) {
+                    let _ = conn.change_property32(PropMode::REPLACE, w, state, AtomEnum::ATOM, &[skip_bar, skip_pager, above, sticky]);
+                    let _ = conn.change_property32(PropMode::REPLACE, w, desktop, AtomEnum::CARDINAL, &[0xFFFF_FFFF]);
+                }
             }
-            // 1: add; then the source, a normal application.
-            let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, state, [1, skip_bar, skip_pager, 1, 0]));
-            let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, state, [1, sticky, 0, 1, 0]));
-            let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, desktop, [0xFFFF_FFFF, 1, 0, 0, 0]));
-            done.push(w);
+        }
+        // Ours shown without it: asked of the window manager.
+        if last.is_none_or(|t| t.elapsed() >= Duration::from_secs(1)) {
+            *last = Some(Instant::now());
+            let listed = values(conn, *root, "_NET_CLIENT_LIST");
+            strangers.retain(|w| listed.contains(w));
+            let mask = EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY;
+            for w in listed {
+                if strangers.contains(&w) {
+                    continue;
+                }
+                if values(conn, w, "_NET_WM_PID").first() != Some(&me) {
+                    strangers.push(w);
+                    continue;
+                }
+                if values(conn, w, "_NET_WM_STATE").contains(&skip_bar) {
+                    continue;
+                }
+                if !asked.contains(&w) {
+                    asked.push(w);
+                    crate::log::line(&format!("fenêtre {w:#x} dans la barre des tâches : sortie demandée"));
+                }
+                // 1: add; then the source, a normal application.
+                let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, state, [1, skip_bar, skip_pager, 1, 0]));
+                let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, state, [1, sticky, 0, 1, 0]));
+                let _ = conn.send_event(false, *root, mask, ClientMessageEvent::new(32, w, desktop, [0xFFFF_FFFF, 1, 0, 0, 0]));
+            }
         }
         let _ = conn.flush();
     }

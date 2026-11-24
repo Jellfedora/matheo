@@ -63,6 +63,8 @@ struct Overlay {
     page: Page,
     /// Your name being typed in his bubble (see `Naming`).
     naming: Option<Naming>,
+    /// Asking how you are: his bubble and its thumbs up and down, as last drawn (screen points).
+    mood: Option<[Rect; 3]>,
     /// What the journal last said of the windows (said again when it changes).
     logged: String,
     /// Windows: frames left to clear what stays behind the drawing (see `glass`), after a change
@@ -81,6 +83,9 @@ struct Overlay {
     /// since when.
     entered: bool,
     pop: Option<Instant>,
+    /// Debug builds: the tour of everything he does (see `TOUR`): its step (none: about to start)
+    /// and since when.
+    tour: Option<(Option<usize>, Instant)>,
 }
 
 /// How near the pointer comes for his eyes to follow it (points from his face).
@@ -254,9 +259,84 @@ enum Demo {
     /// Popping out of the bottom of the screen, as he may arrive at the start.
     Pop,
     Say(Own),
+    /// Everything, one after another (see `TOUR`).
+    Tour,
 }
 
-const DEMOS: [(&str, Demo); 21] = [
+/// Debug builds: a step of the tour, besides his demos: how he looks (left as he is after it).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Step {
+    Play(Demo),
+    Wilt(f32),
+    Tired,
+    Shades,
+    Dizzy,
+    Glad,
+    Grown,
+    Flower,
+    Skin(Skin),
+    /// Changing plant (from the next one to his own).
+    Swap,
+    /// The watering can pouring (counted as a watering).
+    Water,
+    /// A season's outfit, on one of his plants (the first time, its words said too).
+    Season(Season, Skin, bool),
+}
+
+/// Debug builds: the tour, `MATHEO_TOUR=1` at the start or « Tout voir » on the demo page: his
+/// demos, then his looks, his plants, his season outfits, each named at the top of his screen.
+fn tour_steps(lang: crate::i18n::Lang) -> Vec<(String, Step)> {
+    let mut steps: Vec<(String, Step)> = DEMOS.iter().filter(|(_, d)| *d != Demo::Tour).map(|(label, d)| ((*label).to_owned(), Step::Play(*d))).collect();
+    steps.extend([
+        ("L’arrosage", Step::Water),
+        ("Content (arrosé)", Step::Glad),
+        ("Soif (1/3)", Step::Wilt(1.0 / 3.0)),
+        ("Soif (2/3)", Step::Wilt(2.0 / 3.0)),
+        ("Dépéri (3/3)", Step::Wilt(1.0)),
+        ("La tête qui tourne", Step::Dizzy),
+        ("Le soir, fatigué", Step::Tired),
+        ("Vendredi aprèm, lunettes de soleil", Step::Shades),
+        ("Grandi (des feuilles en plus)", Step::Grown),
+        ("La fleur du jour (3 arrosages)", Step::Flower),
+        ("Changement d’apparence", Step::Swap),
+    ].map(|(l, st)| (l.to_owned(), st)));
+    steps.extend(Skin::ALL.iter().map(|&k| (format!("Apparence : {}", k.label(lang)), Step::Skin(k))));
+    for season in Season::ALL {
+        for (i, &skin) in Skin::ALL.iter().enumerate() {
+            steps.push((format!("Saison : {} · {}", season.label(), skin.label(lang)), Step::Season(season, skin, i == 0)));
+        }
+    }
+    steps
+}
+
+/// The tour started from a step: the one before it, as if it had begun that long ago (none lasts less).
+const TOUR_BEFORE: Duration = Duration::from_secs(4);
+
+/// How long a step of the tour shows.
+fn tour_lasts(step: Step) -> Duration {
+    match step {
+        Step::Play(Demo::Say(Own::Breathe)) => Own::Breathe.lasts(),
+        Step::Play(Demo::Say(Own::News) | Demo::Hello | Demo::Chute | Demo::Land) => Duration::from_secs(9),
+        Step::Play(_) | Step::Water => Duration::from_secs(6),
+        Step::Season(.., true) => Duration::from_secs(8),
+        _ => Duration::from_secs(4),
+    }
+}
+
+/// Debug builds: `MATHEO_TOUR=1`, the tour at the start; `MATHEO_TOUR=<word>`, from the first step
+/// whose name has it (`MATHEO_TOUR=saison`, the season outfits).
+fn tour_asked() -> Option<String> {
+    cfg!(debug_assertions).then(|| std::env::var("MATHEO_TOUR").ok()).flatten()
+}
+
+/// The step the tour starts from (`tour_asked`).
+fn tour_from(lang: crate::i18n::Lang) -> Option<usize> {
+    let word = tour_asked()?.to_lowercase();
+    tour_steps(lang).iter().position(|(label, _)| label.to_lowercase().contains(&word)).and_then(|k| k.checked_sub(1))
+}
+
+const DEMOS: [(&str, Demo); 26] = [
+    ("Tout voir, l’un après l’autre", Demo::Tour),
     ("Parachute", Demo::Chute),
     ("Arrivée par le bas", Demo::Pop),
     ("Chute et atterrissage", Demo::Land),
@@ -278,7 +358,19 @@ const DEMOS: [(&str, Demo); 21] = [
     ("Respirer ensemble", Demo::Say(Own::Breathe)),
     ("Il fait chaud", Demo::Say(Own::Hot)),
     ("Retour après une absence", Demo::Say(Own::Back)),
+    ("Les verres d’eau du jour (le soir)", Demo::Say(Own::Glasses)),
+    ("Ça va aujourd’hui ? (les pouces)", Demo::Say(Own::Mood)),
+    ("Réponse au pouce levé", Demo::Say(Own::MoodUp)),
+    ("Réponse au pouce baissé", Demo::Say(Own::MoodDown)),
 ];
+
+/// Debug builds: the tour's step named at the top of his screen.
+fn paint_tour_caption(painter: &egui::Painter, screen: Rect, caption: &str) {
+    let galley = painter.layout_no_wrap(caption.to_owned(), FontId::proportional(20.0), Color32::WHITE);
+    let r = Rect::from_center_size(Pos2::new(screen.center().x, screen.min.y + 70.0), galley.size() + Vec2::new(36.0, 18.0));
+    painter.rect_filled(r, 12.0, Color32::from_rgba_unmultiplied(30, 32, 40, 220));
+    painter.galley(r.center() - galley.size() / 2.0, galley, Color32::WHITE);
+}
 
 /// Where his menu shows (screen points): from the click, kept within the screen.
 fn menu_rect(at: Pos2, rows: usize, screen: Rect) -> Rect {
@@ -443,7 +535,13 @@ pub(crate) fn run(mut settings: Settings) {
                     crate::access::ask();
                 }
             }
-            Ok(Box::new(Overlay { mouse, hot: hot.clone(), settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), antics: Antics::default(), care: Care::new(first, news), page: Page::Main, naming: None, logged: String::new(), glass: GLASS, gaze: Vec2::ZERO, swap: None, can_counted: None, can_away: false, entered: false, pop: None }))
+            // The tour: from its start (a few seconds after his), or from the step asked.
+            let tour = tour_asked().map(|_| match tour_from(settings.lang) {
+                // After his entrance.
+                Some(k) => (Some(k), Instant::now() + Duration::from_secs(3) - TOUR_BEFORE),
+                None => (None, Instant::now()),
+            });
+            Ok(Box::new(Overlay { mouse, hot: hot.clone(), settings, screen: start, work, pressed: false, right: false, last: None, full: (Vec::new(), None), matheo, menu: None, told_newer: false, told_failed: false, leaving: None, others: Default::default(), season: Season::now(), antics: Antics::default(), care: Care::new(first, news), page: Page::Main, naming: None, mood: None, logged: String::new(), glass: GLASS, gaze: Vec2::ZERO, swap: None, can_counted: None, can_away: false, entered: false, pop: None, tour }))
         }),
     );
     match result {
@@ -476,7 +574,49 @@ impl Overlay {
             Demo::Advice => m.advise(),
             Demo::Pop => self.pop = Some(now),
             Demo::Say(own) => m.tip = Some((Said::Own(own), now)),
+            Demo::Tour => self.tour = Some((None, now - Duration::from_secs(10))),
         }
+    }
+
+    /// Debug builds: the tour's next step when due (a few seconds after the start first); each
+    /// starts with nothing over him. Its step and its name, while it goes on.
+    fn tour_tick(&mut self) -> Option<(usize, usize, String, Step)> {
+        let (step, since) = self.tour?;
+        let steps = tour_steps(self.settings.lang);
+        let due = match step {
+            None => since.elapsed() >= Duration::from_secs(4),
+            Some(k) => steps.get(k).is_none_or(|(_, st)| since.elapsed() >= tour_lasts(*st)),
+        };
+        let k = match (step, due) {
+            (Some(k), false) => k,
+            _ => {
+                let k = step.map_or(0, |k| k + 1);
+                let Some(&(_, st)) = steps.get(k) else {
+                    self.tour = None;
+                    self.matheo.tip = None;
+                    crate::log::line("visite : finie");
+                    return None;
+                };
+                let now = Instant::now();
+                self.tour = Some((Some(k), now));
+                crate::log::line(&format!("visite : étape {}/{} · {}", k + 1, steps.len(), steps[k].0));
+                let m = &mut self.matheo;
+                m.tip = None;
+                m.can = None;
+                match st {
+                    Step::Play(demo) => self.play(demo),
+                    Step::Water => self.matheo.can = Some((now, Some(now))),
+                    Step::Dizzy => self.matheo.dizzy = Some(now + tour_lasts(st)),
+                    Step::Glad => self.matheo.glad = Some(now + tour_lasts(st)),
+                    Step::Season(k, _, true) => self.matheo.tip = Some((Said::Own(Own::Feast(k, false)), now)),
+                    Step::Swap => self.swap = Some((Skin::ALL[(Skin::ALL.iter().position(|&k| k == self.settings.skin).unwrap_or(0) + 1) % Skin::ALL.len()], now)),
+                    _ => {}
+                }
+                k
+            }
+        };
+        let (label, st) = steps.get(k)?.clone();
+        Some((k + 1, steps.len(), label, st))
     }
 
     /// Asks your name: his bubble with the field to type it in.
@@ -724,6 +864,17 @@ impl eframe::App for Overlay {
                 }
             }
         }
+        // Asking how you are: a thumb answers (elsewhere on the bubble closes it, unanswered).
+        if !matches!(self.matheo.tip, Some((Said::Own(Own::Mood), _))) {
+            self.mood = None;
+        }
+        if let (true, Some([_, up, down]), Some(p)) = (pressed, self.mood, mouse.at)
+            && (up.contains(p) || down.contains(p))
+        {
+            on_name = true;
+            self.mood = None;
+            self.matheo.tip = Some((Said::Own(if up.contains(p) { Own::MoodUp } else { Own::MoodDown }), Instant::now()));
+        }
         if pressed
             && matches!(self.matheo.tip, Some((Said::Update, _)))
             && self.matheo.bubble.zip(mouse.at).is_some_and(|(r, p)| r.contains(p))
@@ -789,7 +940,7 @@ impl eframe::App for Overlay {
             self.matheo.friday = friday();
             self.season = Season::now();
         }
-        self.care.step(&mut self.matheo, self.settings.tips, self.settings.hours, self.settings.name.is_some(), mouse.at);
+        self.care.step(&mut self.matheo, self.settings.tips, self.settings.hours, self.settings.name.is_some(), mouse.at, self.season);
         // His eyes following the pointer near him (back ahead when it goes away), smoothly.
         let to = self.matheo.at.zip(mouse.at).map_or(Vec2::ZERO, |(at, p)| {
             let d = p - (at - Vec2::new(0.0, MATHEO_H * 0.25));
@@ -839,8 +990,18 @@ impl eframe::App for Overlay {
         } else {
             self.can_away = false;
         }
+        let tour = self.tour_tick();
         let m = &self.matheo;
         let mut look = Look { gaze: self.gaze, skin: self.settings.skin, ..self.antics.dress(m.look(m.tired.0, m.friday), m) };
+        match tour.as_ref().map(|t| t.3) {
+            Some(Step::Wilt(w)) => look.wilt = w,
+            Some(Step::Tired) => look.tired = true,
+            Some(Step::Shades) => look.shades = true,
+            Some(Step::Grown) => look.extra = 3,
+            Some(Step::Flower) => (look.extra, look.flower) = (3, true),
+            Some(Step::Skin(k) | Step::Season(_, k, _)) => look.skin = k,
+            _ => {}
+        }
         // Changing plant: the one before sinking into the soil, the new one popping out.
         if let Some((before, since)) = self.swap {
             let t = since.elapsed().as_secs_f32();
@@ -862,20 +1023,28 @@ impl eframe::App for Overlay {
         let swapping = self.swap.map(|(_, since)| since.elapsed().as_secs_f32());
         let can = m.at.zip(m.can).filter(|_| !self.can_away).map(|(at, (since, pour))| can_view(at, can_side(at, &works), since, pour));
         let plant = m.at.map(|at| (at, look));
-        let season = self.season;
+        let season = match tour.as_ref().map(|t| t.3) {
+            Some(Step::Season(k, ..)) => Some(k),
+            _ => self.season,
+        };
+        let tour_caption = tour.map(|(k, of, label, _)| format!("Visite {k}/{of} · {label}"));
+        // His plant's own touch to the outfit.
+        let plant = plant.map(|(at, look)| (at, Look { feast: season, ..look }));
         let antics = &self.antics;
         let mut keys = Vec::new();
         let naming = self.naming.as_ref().map(|n| Naming { typed: n.typed.clone(), keys: n.keys, rects: None });
         let t = self.settings.lang.strings();
         // His words: one of a few at each bubble, with your name now and then.
         let v = self.care.variant(m.tip);
+        let asking_mood = matches!(m.tip, Some((Said::Own(Own::Mood), _)));
         let tip = m.tip.map(|(said, since)| {
             let text = match said {
                 Said::Own(Own::Breathe) => breathe_text(since.elapsed().as_secs_f32(), t, v),
+                Said::Own(Own::Glasses) => glasses_text(glasses_today(&m.growth).max(1), t, v),
                 Said::Own(own) => own.text(t, v).to_owned(),
                 Said::Ouch => pick(t.more_ouch, v).to_owned(),
                 Said::Shaking => pick(t.more_shaking, v).to_owned(),
-                Said::Thanks => pick(t.more_thanks, v).to_owned(),
+                Said::Thanks => thanks_text(glasses_today(&m.growth), t, v),
                 Said::Thirsty => pick(t.more_thirsty, v).to_owned(),
                 _ => said.text(self.settings.lang).to_owned(),
             };
@@ -893,7 +1062,7 @@ impl eframe::App for Overlay {
         let menu_on = menu.and_then(|m| on(m.center()));
         let pointer_on = mouse.at.and_then(on);
         let gallery = cfg!(debug_assertions) && std::env::var_os("MATHEO_GALLERY").is_some();
-        if menu.is_some() || gallery {
+        if menu.is_some() || gallery || tour_caption.is_some() {
             busy = true;
         }
         // A window over each screen, made once at its size and never moved, drawing what is on its
@@ -940,7 +1109,7 @@ impl eframe::App for Overlay {
             if keys_here {
                 take_keys(&title);
             }
-            let (bubble, name_rects, typed_keys) = ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("matheo-screen", i)), builder, |ctx, _| {
+            let (bubble, name_rects, typed_keys, mood_rects) = ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("matheo-screen", i)), builder, |ctx, _| {
                 if keys_here {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
@@ -953,6 +1122,7 @@ impl eframe::App for Overlay {
                 let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("matheo")));
                 let mut bubble = None;
                 let mut name_rects = None;
+                let mut mood_rects = None;
                 let mut typed_keys = Vec::new();
                 if let (Some((at, look)), true) = (plant, his) {
                     // Popping out of the bottom of the screen: drawn lower (where he is stays).
@@ -976,6 +1146,10 @@ impl eframe::App for Overlay {
                         if n.keys.is_some() {
                             typed_keys = ctx.input(|i| i.events.clone());
                         }
+                    } else if let (true, Some(text)) = (asking_mood, tip.as_deref()) {
+                        let rects = paint_mood_bubble(&painter, at - origin.to_vec2(), text, mouse.at.map(|p| p - origin.to_vec2()), screen.translate(-origin.to_vec2())).map(|r| r.translate(origin.to_vec2()));
+                        bubble = Some(rects[0]);
+                        mood_rects = Some(rects);
                     } else {
                         bubble = tip.as_deref().map(|text| paint_matheo_tip(&painter, at - origin.to_vec2(), text, screen.translate(-origin.to_vec2())).translate(origin.to_vec2()));
                     }
@@ -984,14 +1158,20 @@ impl eframe::App for Overlay {
                 if let Some(menu) = menu_here {
                     paint_menu(&painter, menu.translate(-origin.to_vec2()), &rows, hover);
                 }
+                if let (Some(caption), true) = (tour_caption.as_deref(), his) {
+                    paint_tour_caption(&painter, screen.translate(-origin.to_vec2()), caption);
+                }
                 if gallery && i == home {
                     paint_matheo_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                     paint_season_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                     paint_skin_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                     paint_antics_gallery(&painter, screen.translate(-origin.to_vec2()), now);
                 }
-                (bubble, name_rects, typed_keys)
+                (bubble, name_rects, typed_keys, mood_rects)
             });
+            if his && mood_rects.is_some() {
+                self.mood = mood_rects;
+            }
             if bubble.is_some() {
                 self.matheo.bubble = bubble;
             }

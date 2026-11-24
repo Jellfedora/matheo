@@ -1,5 +1,5 @@
 /// A season's outfit, Mathéo's own (Ronnie's Mathéo has none): put on over his drawing.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Season {
     /// December 1 to 25: a Santa hat, snow falling.
     Christmas,

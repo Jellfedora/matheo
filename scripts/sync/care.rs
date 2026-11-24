@@ -23,6 +23,15 @@ enum Own {
     Again,
     /// The first start of a new version: what's new in it (in place of hello again).
     News,
+    /// The evening: the glasses of water of the day (see `glasses_text`).
+    Glasses,
+    /// Some days: how are you? A thumb up or down in his bubble (see `mood_due`), and his answer.
+    Mood,
+    MoodUp,
+    MoodDown,
+    /// His season's outfit on: a word of the feast (on the day itself, for Christmas), now and then
+    /// (see `feast_due`).
+    Feast(Season, bool),
 }
 
 impl Own {
@@ -44,6 +53,16 @@ impl Own {
             Own::Named => t.matheo_named,
             Own::Again => t.matheo_again,
             Own::News => t.matheo_news,
+            Own::Glasses => t.matheo_glasses_good,
+            Own::Mood => t.matheo_mood,
+            Own::MoodUp => t.matheo_mood_up,
+            Own::MoodDown => t.matheo_mood_down,
+            Own::Feast(Season::Christmas, false) => t.matheo_christmas_soon,
+            Own::Feast(Season::Christmas, true) => t.matheo_christmas,
+            Own::Feast(Season::NewYear, _) => t.matheo_new_year,
+            Own::Feast(Season::Valentine, _) => t.matheo_valentine,
+            Own::Feast(Season::Easter, _) => t.matheo_easter,
+            Own::Feast(Season::Halloween, _) => t.matheo_halloween,
         }
     }
 
@@ -59,6 +78,8 @@ impl Own {
             Own::News => Duration::from_secs(15),
             Own::AskName => Duration::from_secs(60),
             Own::Breathe => BREATHE_LASTS,
+            Own::Mood => Duration::from_secs(90),
+            Own::MoodUp | Own::MoodDown => Duration::from_secs(12),
             _ => TIP_SHOWN,
         }
     }
@@ -69,6 +90,8 @@ impl Own {
 const CARE_FIRST: Duration = Duration::from_secs(25 * 60);
 const CARE_EVERY: Duration = Duration::from_secs(40 * 60);
 const CARE_GAP: Duration = Duration::from_secs(8 * 60);
+/// How you are, the glasses of water of the day: asked, said that long after any other bubble.
+const QUIET_GAP: Duration = Duration::from_secs(2 * 60);
 /// Away that long (the pointer still, the computer asleep): glad to see you back.
 const AWAY_LONG: Duration = Duration::from_secs(3600);
 /// Your name asked that long after his start (after his hello).
@@ -166,7 +189,7 @@ impl Care {
     /// Each frame, after his own advice: says what is due, if his advice is on, he isn't quiet, nor
     /// held, someone is at the screen and no other bubble shows (his advice can give way to his
     /// hours).
-    fn step(&mut self, plant: &mut Plant, tips: bool, hours: crate::settings::Hours, named: bool, mouse: Option<Pos2>) {
+    fn step(&mut self, plant: &mut Plant, tips: bool, hours: crate::settings::Hours, named: bool, mouse: Option<Pos2>, season: Option<Season>) {
         let moment = Instant::now();
         let wall = std::time::SystemTime::now();
         let mut back = false;
@@ -214,6 +237,25 @@ impl Care {
             plant.tip = Some((Said::Own(own), moment));
             return;
         }
+        let calm = plant.tip.is_none() && (self.bubble.elapsed() >= QUIET_GAP || care_forced());
+        // His season's outfit on: a word of the feast, once on the days it's due.
+        if calm && let Some(feast) = feast_due(now, season, &self.said.1) {
+            self.said.1.push(feast);
+            plant.tip = Some((Said::Own(feast), moment));
+            return;
+        }
+        // Some days, in the day: how are you? Once.
+        if calm && mood_due(now, &self.said.1) {
+            self.said.1.push(Own::Mood);
+            plant.tip = Some((Said::Own(Own::Mood), moment));
+            return;
+        }
+        // The evening (from the end of the day on): the glasses of water of the day, once.
+        if calm && glasses_due(now, hours, glasses_today(&plant.growth), &self.said.1) {
+            self.said.1.push(Own::Glasses);
+            plant.tip = Some((Said::Own(Own::Glasses), moment));
+            return;
+        }
         if plant.tip.is_none() && moment >= self.next && (self.bubble.elapsed() >= CARE_GAP || care_forced()) {
             use chrono::Datelike;
             let list: &[Own] = if (6..=8).contains(&now.month()) { &[Own::Eyes, Own::Hot, Own::Posture, Own::Breathe] } else { &[Own::Eyes, Own::Posture, Own::Breathe] };
@@ -223,6 +265,64 @@ impl Care {
             plant.tip = Some((Said::Own(own), moment));
         }
     }
+}
+
+/// Glasses of water today: his waterings today (each with a reminder to drink a glass, then water
+/// him).
+fn glasses_today(growth: &(String, u32, u32)) -> u32 {
+    if growth.0 == chrono::Local::now().format("%Y-%m-%d").to_string() { growth.1 } else { 0 }
+}
+
+/// The glasses of water of the day due at `now`: some drunk, the end of the day (`hours`' last, on or
+/// off) past, not said yet today.
+fn glasses_due(now: chrono::NaiveDateTime, hours: crate::settings::Hours, glasses: u32, said: &[Own]) -> bool {
+    use chrono::Timelike;
+    glasses > 0 && now.hour() * 60 + now.minute() >= hours.at[3] && !said.contains(&Own::Glasses)
+}
+
+/// Asking how you are due at `now`: two days in five (the same all day long, picked from the date),
+/// from a time of the day's own between 10:30 and 15:30 until 5 pm; once.
+fn mood_due(now: chrono::NaiveDateTime, said: &[Own]) -> bool {
+    use chrono::{Datelike, Timelike};
+    let h = (now.date().num_days_from_ce() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    let h = h ^ (h >> 29);
+    let from = 10 * 60 + 30 + ((h >> 8) % (5 * 60)) as u32;
+    h % 5 < 2 && (from..17 * 60).contains(&(now.hour() * 60 + now.minute())) && !said.contains(&Own::Mood)
+}
+
+/// A word of the feast due at `now`, `season`'s outfit on: between 9 am and 8 pm, once; a day in two
+/// for the long ones (Christmas, Halloween) but on their days (December 24 and 25, October 31), every
+/// day for the others.
+fn feast_due(now: chrono::NaiveDateTime, season: Option<Season>, said: &[Own]) -> Option<Own> {
+    use chrono::{Datelike, Timelike};
+    let season = season?;
+    let (m, d) = (now.month(), now.day());
+    let day = matches!((season, m, d), (Season::Christmas, 12, 24..=25) | (Season::Halloween, 10, 31));
+    let long = matches!(season, Season::Christmas | Season::Halloween);
+    let today = day || !long || now.date().num_days_from_ce() % 2 == 0;
+    let said_already = said.iter().any(|o| matches!(o, Own::Feast(..)));
+    (today && (9..20).contains(&now.hour()) && !said_already).then_some(Own::Feast(season, season == Season::Christmas && day))
+}
+
+/// « 3 glasses of water ».
+fn glasses_said(n: u32, t: &'static crate::i18n::Strings) -> String {
+    (if n == 1 { t.glass_one } else { t.glass_many }).replace("{n}", &n.to_string())
+}
+
+/// The evening's words on the `n` glasses of water of the day (number `v`).
+fn glasses_text(n: u32, t: &'static crate::i18n::Strings, v: usize) -> String {
+    let list = match n {
+        0..=2 => t.matheo_glasses_few,
+        3..=5 => t.matheo_glasses_good,
+        _ => t.matheo_glasses_lots,
+    };
+    pick(list, v).replace("{glasses}", &glasses_said(n, t))
+}
+
+/// Thanks for watering him (words number `v`), and the glasses of water of the day, `n` with this one.
+fn thanks_text(n: u32, t: &'static crate::i18n::Strings, v: usize) -> String {
+    let count = if n <= 1 { t.thanks_glass_first.to_owned() } else { t.thanks_glass_more.replace("{glasses}", &glasses_said(n, t)) };
+    format!("{}\n{count}", pick(t.more_thanks, v))
 }
 
 /// Words number `v` among `list` (any number: taken in turn).
@@ -343,6 +443,61 @@ mod care_tests {
     }
 
     #[test]
+    fn the_glasses_of_water_in_the_evening_once() {
+        use super::{glasses_due, glasses_text, personal, thanks_text, Said};
+        let hours = Hours::default();
+        assert!(!glasses_due(at(17, 17, 59), hours, 4, &[]), "before the end of the day");
+        assert!(glasses_due(at(17, 18, 0), hours, 4, &[]));
+        assert!(glasses_due(at(21, 22, 30), Hours { on: false, ..hours }, 1, &[]), "his hours off, the weekend: still");
+        assert!(!glasses_due(at(17, 19, 0), hours, 0, &[]), "none drunk: nothing said");
+        assert!(!glasses_due(at(17, 19, 0), hours, 4, &[Own::Glasses]), "said once");
+        let t = crate::i18n::Lang::Fr.strings();
+        assert_eq!(personal(Said::Own(Own::Glasses), &glasses_text(1, t, 0), None, t), "Petit bilan du jour : 1 verre d’eau. Demain, on en boit un de plus ?");
+        assert_eq!(personal(Said::Own(Own::Glasses), &glasses_text(4, t, 0), Some("Julie"), t), "Bilan du jour : 4 verres d’eau, bien joué Julie ! Toi et mes racines, on est bien hydratés.");
+        assert_eq!(personal(Said::Own(Own::Glasses), &glasses_text(4, t, 0), None, t), "Bilan du jour : 4 verres d’eau, bien joué ! Toi et mes racines, on est bien hydratés.");
+        assert_eq!(glasses_text(7, t, 1), "Record ! 7 verres d’eau aujourd’hui. Je suis fier de toi.");
+        assert!(thanks_text(1, t, 0).ends_with("\nPremier verre d’eau de la journée !"));
+        assert!(thanks_text(3, t, 0).ends_with("\nEt de 3 verres d’eau aujourd’hui !"));
+        let en = crate::i18n::Lang::En.strings();
+        assert!(thanks_text(2, en, 0).ends_with("\nThat’s 2 glasses of water today!"));
+    }
+
+    #[test]
+    fn a_word_of_the_feast_now_and_then() {
+        use super::{Season, feast_due};
+        let day = |m, d, h| NaiveDate::from_ymd_opt(2026, m, d).unwrap().and_hms_opt(h, 0, 0).unwrap();
+        assert_eq!(feast_due(day(12, 24, 10), Some(Season::Christmas), &[]), Some(Own::Feast(Season::Christmas, true)));
+        assert_eq!(feast_due(day(12, 25, 19), Some(Season::Christmas), &[]), Some(Own::Feast(Season::Christmas, true)));
+        assert_eq!(feast_due(day(12, 24, 8), Some(Season::Christmas), &[]), None, "too early");
+        assert_eq!(feast_due(day(12, 24, 10), Some(Season::Christmas), &[Own::Feast(Season::Christmas, true)]), None, "once");
+        assert_eq!(feast_due(day(12, 24, 10), None, &[]), None, "no outfit");
+        // Before Christmas, a day in two, its words before the day.
+        let said: Vec<Option<Own>> = (1..=23).map(|d| feast_due(day(12, d, 10), Some(Season::Christmas), &[])).collect();
+        assert!(said.windows(2).all(|w| w[0].is_some() != w[1].is_some()), "{said:?}");
+        assert!(said.iter().flatten().all(|o| *o == Own::Feast(Season::Christmas, false)));
+        assert!(feast_due(day(10, 31, 10), Some(Season::Halloween), &[]).is_some());
+        assert!((1..=2).all(|d| feast_due(day(1, d, 10), Some(Season::NewYear), &[]).is_some()), "every day");
+        assert!(feast_due(day(2, 14, 12), Some(Season::Valentine), &[]).is_some());
+    }
+
+    #[test]
+    fn how_are_you_some_days_once() {
+        use super::mood_due;
+        let mut days = 0;
+        for d in 0..200 {
+            let date = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap() + chrono::Days::new(d);
+            let asked: Vec<u32> = (0..24 * 60).filter(|m| mood_due(date.and_hms_opt(m / 60, m % 60, 0).unwrap(), &[])).collect();
+            if let Some(&first) = asked.first() {
+                days += 1;
+                assert!((10 * 60 + 30..15 * 60 + 30).contains(&first), "{date}: from {first}");
+                assert_eq!(asked.last(), Some(&(17 * 60 - 1)), "{date}: until 5 pm");
+                assert!(!mood_due(date.and_hms_opt(16, 59, 0).unwrap(), &[Own::Mood]), "once");
+            }
+        }
+        assert!((60..100).contains(&days), "{days} days in 200");
+    }
+
+    #[test]
     fn his_hours_as_set_in_his_menu() {
         let mut hours = Hours::default();
         hours.shift(1, 30);
@@ -358,7 +513,7 @@ mod care_tests {
 
     #[test]
     fn his_words_with_your_name_or_without() {
-        use super::{Said, personal};
+        use super::{Said, Season, glasses_text, personal, thanks_text};
         let t = crate::i18n::Lang::Fr.strings();
         let back = Said::Own(Own::Back);
         assert_eq!(personal(back, Own::Back.text(t, 0), Some("Julie"), t), "Te revoilà, Julie ! Tu m’as manqué.");
@@ -368,13 +523,21 @@ mod care_tests {
         assert_eq!(personal(Said::Tip(4), "Bois.", Some("Julie"), t), "Bois.");
         for lang in crate::i18n::Lang::ALL {
             let t = lang.strings();
-            let all = [Own::Clock(0), Own::Clock(1), Own::Clock(3), Own::Monday, Own::Lamp, Own::Weekend, Own::Eyes, Own::Posture, Own::Breathe, Own::Hot, Own::Back, Own::AskName, Own::Again, Own::News];
+            let all = [Own::Clock(0), Own::Clock(1), Own::Clock(3), Own::Monday, Own::Lamp, Own::Weekend, Own::Eyes, Own::Posture, Own::Breathe, Own::Hot, Own::Back, Own::AskName, Own::Again, Own::News, Own::Mood, Own::MoodUp, Own::MoodDown, Own::Feast(Season::Christmas, false), Own::Feast(Season::Christmas, true), Own::Feast(Season::NewYear, false), Own::Feast(Season::Valentine, false), Own::Feast(Season::Easter, false), Own::Feast(Season::Halloween, false)];
             // (`Named` only with a name.)
             for own in all {
                 assert!(!own.texts(t).is_empty(), "{own:?}");
                 for v in 0..own.texts(t).len() {
                     let text = personal(Said::Own(own), own.text(t, v), None, t);
                     assert!(!text.contains('{') && !text.contains(" ,") && !text.starts_with(' '), "{own:?} {v}: {text}");
+                }
+            }
+            for n in 0..10 {
+                for v in 0..4 {
+                    for text in [glasses_text(n, t, v), thanks_text(n, t, v)] {
+                        let text = personal(Said::Own(Own::Glasses), &text, None, t);
+                        assert!(!text.contains('{') && !text.contains("  ") && !text.contains(" ,"), "{text}");
+                    }
                 }
             }
             for list in [t.more_ouch, t.more_shaking, t.more_thanks, t.more_thirsty, t.breathe_done] {
@@ -384,6 +547,22 @@ mod care_tests {
             }
         }
     }
+}
+
+/// Asking how you are: his bubble (as `paint_matheo_tip` draws it, `question` on top) with a thumb up
+/// and a thumb down under it, the one under the pointer (`hover`) lit. The bubble, the two thumbs.
+fn paint_mood_bubble(painter: &egui::Painter, foot: Pos2, question: &str, hover: Option<Pos2>, bounds: Rect) -> [Rect; 3] {
+    let r = paint_matheo_tip(painter, foot, &format!("{question}\n\n\n"), bounds);
+    let size = Vec2::new(58.0, 30.0);
+    let y = r.max.y - 10.0 - size.y;
+    let up = Rect::from_min_size(Pos2::new(r.center().x - size.x - 7.0, y), size);
+    let down = Rect::from_min_size(Pos2::new(r.center().x + 7.0, y), size);
+    for (b, thumb, fill, lit) in [(up, "👍", Color32::from_rgb(76, 160, 70), Color32::from_rgb(92, 182, 84)), (down, "👎", Color32::from_rgb(214, 138, 74), Color32::from_rgb(232, 156, 90))] {
+        let on = hover.is_some_and(|p| b.contains(p));
+        painter.rect_filled(if on { b.expand(1.5) } else { b }, 15.0, if on { lit } else { fill });
+        painter.text(b.center() + Vec2::new(0.0, 1.0), egui::Align2::CENTER_CENTER, thumb, FontId::proportional(18.0), Color32::WHITE);
+    }
+    [r, up, down]
 }
 
 /// Asking your name: his bubble (as `paint_matheo_tip` draws it, `question` on top) with a field to

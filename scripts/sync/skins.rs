@@ -121,6 +121,9 @@ fn paint_cactus(painter: &egui::Painter, look: Look, now: f64, u: f32, up: &dyn 
         drop_at(painter, p(-4.0, h * 0.5), u);
         drop_at(painter, p(5.0, h * 0.78), u);
     }
+    if let Some(season) = look.feast {
+        paint_cactus_feast(painter, season, &p, &arms, h, u, t);
+    }
     // Watered well today: a pink flower on top.
     if look.flower {
         let c = Vec2::new(0.0, h + 0.5);
@@ -187,6 +190,155 @@ fn paint_sunflower(painter: &egui::Painter, look: Look, now: f64, u: f32, up: &d
         }
     }
     sunflower_head(painter, look, up, main[main.len() - 1], 1.0, face, u);
+    if let Some(season) = look.feast {
+        paint_sunflower_feast(painter, season, up, main[main.len() - 1], 1.0 - 0.3 * look.hide, u, t);
+    }
+}
+
+/// Paloma's touch to the season's outfit (over the one on the pot): a striped scarf at Christmas, a
+/// gold star on top for the New Year, a heart on top on Valentine's Day, an egg in her raised arm at
+/// Easter, a little pumpkin on top at Halloween. `p` places a point of her (her units, upwards from
+/// the soil, as she leans), `h` her height.
+fn paint_cactus_feast(painter: &egui::Painter, season: Season, p: &dyn Fn(f32, f32) -> Pos2, arms: &[Vec<Pos2>], h: f32, u: f32, t: f32) {
+    let top = p(0.0, h);
+    match season {
+        Season::Christmas => {
+            // Wound round under her top, its end hanging down her side.
+            let y = h - 11.5;
+            let red = Color32::from_rgb(206, 32, 44);
+            let white = Color32::from_rgb(250, 250, 248);
+            painter.add(egui::Shape::convex_polygon(vec![p(-10.8, y - 2.4), p(10.8, y - 2.4), p(10.8, y + 2.4), p(-10.8, y + 2.4)], red, Stroke::new(0.7 * u, Color32::from_rgb(140, 16, 26))));
+            for x in [-6.0f32, 0.0, 6.0] {
+                painter.line_segment([p(x, y - 2.2), p(x, y + 2.2)], Stroke::new(1.4 * u, white));
+            }
+            let sway = (t * 1.5).sin() * 0.8;
+            painter.add(egui::Shape::convex_polygon(vec![p(4.0, y - 1.5), p(8.5, y - 1.5), p(9.5 + sway, y - 12.0), p(5.0 + sway, y - 12.0)], red, Stroke::new(0.7 * u, Color32::from_rgb(140, 16, 26))));
+            painter.line_segment([p(5.2 + sway, y - 9.0), p(9.3 + sway, y - 9.0)], Stroke::new(1.4 * u, white));
+        }
+        Season::NewYear => {
+            // A gold star, turning slowly, twinkling.
+            let c = top + Vec2::new(0.0, -6.0 * u);
+            let gold = Color32::from_rgb(250, 204, 50);
+            let r = (5.2 + (t * 3.0).sin() * 0.4) * u;
+            let point = |i: usize, rad: f32| c + Vec2::angled(t * 0.6 - std::f32::consts::FRAC_PI_2 + i as f32 * std::f32::consts::TAU / 10.0) * rad;
+            for i in (0..10).step_by(2) {
+                painter.add(egui::Shape::convex_polygon(vec![point(i, r), point(i + 1, r * 0.45), c, point(i + 9, r * 0.45)], gold, Stroke::NONE));
+            }
+            painter.circle_filled(c, r * 0.45, gold);
+        }
+        Season::Valentine => {
+            // A heart on her top, beating.
+            let beat = 1.0 + ((t * 4.0).sin().max(0.0)).powi(4) * 0.18;
+            heart(painter, top + Vec2::new(0.0, -4.0 * u), 4.8 * u * beat, Color32::from_rgb(226, 36, 78));
+        }
+        Season::Easter => {
+            // An egg held up in her first arm.
+            if let Some(&end) = arms.first().and_then(|a| a.last()) {
+                easter_egg(painter, end + Vec2::new(0.0, -6.5 * u), 0.75 * u, Color32::from_rgb(250, 190, 210));
+            }
+        }
+        Season::Halloween => {
+            // A little pumpkin on her top, its face lit.
+            let c = top + Vec2::new(0.0, -4.0 * u);
+            let orange = Color32::from_rgb(240, 130, 30);
+            let edge = Stroke::new(0.7 * u, Color32::from_rgb(170, 80, 10));
+            for dx in [-2.6f32, 2.6, 0.0] {
+                painter.add(egui::Shape::ellipse_filled(c + Vec2::new(dx, 0.0) * u, Vec2::new(3.6, 4.0) * u, orange));
+                painter.add(egui::Shape::ellipse_stroke(c + Vec2::new(dx, 0.0) * u, Vec2::new(3.6, 4.0) * u, edge));
+            }
+            painter.line_segment([c + Vec2::new(0.0, -3.6) * u, c + Vec2::new(0.8, -6.0) * u], Stroke::new(1.4 * u, Color32::from_rgb(80, 110, 40)));
+            let glow = Color32::from_rgb(255, 226, 90);
+            for s in [-1.0f32, 1.0] {
+                painter.add(egui::Shape::convex_polygon(vec![c + Vec2::new(s * 1.0, -0.4) * u, c + Vec2::new(s * 2.6, -0.4) * u, c + Vec2::new(s * 1.8, -1.8) * u], glow, Stroke::NONE));
+            }
+            painter.add(egui::Shape::convex_polygon(vec![c + Vec2::new(-2.2, 1.0) * u, c + Vec2::new(2.2, 1.0) * u, c + Vec2::new(0.0, 2.4) * u], glow, Stroke::NONE));
+        }
+    }
+}
+
+/// Hélio's touch to the season's outfit (over the one on the pot): a little Santa hat on his head at
+/// Christmas, a gold crown for the New Year, his heart a red heart on Valentine's Day, a chick on his
+/// head at Easter, a spider hanging from his head at Halloween. `c` his head's centre (his units,
+/// upwards), `k` its size.
+fn paint_sunflower_feast(painter: &egui::Painter, season: Season, up: &dyn Fn(Vec2) -> Pos2, c: Vec2, k: f32, u: f32, t: f32) {
+    let at = |x: f32, y: f32| up(c + Vec2::new(x, y) * k);
+    let poly = |points: &[(f32, f32)], fill: Color32, edge: Stroke| {
+        painter.add(egui::Shape::convex_polygon(points.iter().map(|&(x, y)| at(x, y)).collect(), fill, edge));
+    };
+    match season {
+        Season::Christmas => {
+            let red = Color32::from_rgb(206, 32, 44);
+            let edge = Stroke::new(0.8 * u, Color32::from_rgb(140, 16, 26));
+            poly(&[(-8.0, 13.0), (8.0, 13.0), (5.0, 22.0), (-1.0, 25.0)], red, edge);
+            // (Its three points never in a line: a flat triangle drew huge shapes over the screen.)
+            poly(&[(-1.0, 25.0), (5.0, 22.0), (12.0, 17.0)], red, edge);
+            let fur = Color32::from_rgb(250, 250, 248);
+            let soft = Stroke::new(0.7 * u, Color32::from_rgb(200, 200, 205));
+            poly(&[(-9.5, 11.0), (9.5, 11.0), (9.5, 15.0), (-9.5, 15.0)], fur, soft);
+            painter.circle_filled(at(12.0, 17.0), 2.4 * k * u, fur);
+            painter.circle_stroke(at(12.0, 17.0), 2.4 * k * u, soft);
+        }
+        Season::NewYear => {
+            let gold = Color32::from_rgb(244, 196, 48);
+            let edge = Stroke::new(0.8 * u, Color32::from_rgb(190, 140, 20));
+            poly(&[(-8.0, 13.0), (8.0, 13.0), (8.0, 17.0), (-8.0, 17.0)], gold, edge);
+            for x in [-6.0f32, 0.0, 6.0] {
+                poly(&[(x - 2.6, 16.5), (x + 2.6, 16.5), (x, 23.0)], gold, edge);
+            }
+            for (x, color) in [(-6.0f32, Color32::from_rgb(60, 170, 230)), (0.0, Color32::from_rgb(230, 50, 80)), (6.0, Color32::from_rgb(120, 200, 90))] {
+                painter.circle_filled(at(x, 15.0), 1.2 * k * u, color);
+            }
+        }
+        Season::Valentine => {
+            let beat = 1.0 + ((t * 4.0).sin().max(0.0)).powi(4) * 0.18;
+            heart(painter, at(0.0, 0.0) + Vec2::new(0.0, -0.8 * u), 6.0 * k * u * beat, Color32::from_rgb(226, 36, 78));
+        }
+        Season::Easter => {
+            // A chick sitting on his head, looking about now and then.
+            let yellow = Color32::from_rgb(252, 222, 70);
+            let edge = Stroke::new(0.7 * u, Color32::from_rgb(210, 170, 30));
+            let look = if (t % 4.0) < 2.0 { 1.0 } else { -1.0 };
+            let body = at(0.0, 18.5);
+            painter.circle_filled(body, 4.6 * k * u, yellow);
+            painter.circle_stroke(body, 4.6 * k * u, edge);
+            let head = at(look * 2.4, 23.5);
+            painter.circle_filled(head, 3.0 * k * u, yellow);
+            painter.circle_stroke(head, 3.0 * k * u, edge);
+            painter.circle_filled(head + Vec2::new(look * 1.0, -0.6) * k * u, 0.6 * k * u, Color32::from_rgb(40, 30, 20));
+            painter.add(egui::Shape::convex_polygon(vec![head + Vec2::new(look * 2.4, -0.6) * k * u, head + Vec2::new(look * 4.6, 0.2) * k * u, head + Vec2::new(look * 2.4, 0.9) * k * u], Color32::from_rgb(244, 140, 40), Stroke::NONE));
+        }
+        Season::Halloween => {
+            // A spider on its thread, from the tip of his petals on the left, going up and down.
+            let from = at(-15.0, 2.0);
+            let to = from + Vec2::new(0.0, (16.0 + (t * 1.3).sin() * 5.0) * u);
+            painter.line_segment([from, to], Stroke::new(0.6 * u, Color32::from_rgb(225, 225, 235)));
+            let black = Color32::from_rgb(30, 22, 36);
+            for s in [-1.0f32, 1.0] {
+                for (i, a) in [-0.6f32, 0.0, 0.6, 1.1].into_iter().enumerate() {
+                    let wiggle = (t * 6.0 + i as f32).sin() * 0.25;
+                    let knee = to + Vec2::new(s * 3.8, -2.0 + a * 2.6) * u;
+                    painter.line_segment([to, knee], Stroke::new(0.8 * u, black));
+                    painter.line_segment([knee, knee + Vec2::new(s * 1.6, 2.4 + wiggle) * u], Stroke::new(0.8 * u, black));
+                }
+            }
+            painter.circle_filled(to + Vec2::new(0.0, 1.6 * u), 3.0 * u, black);
+            painter.circle_filled(to - Vec2::new(0.0, 1.2 * u), 2.0 * u, black);
+            painter.circle_filled(to + Vec2::new(-0.8, -1.5) * u, 0.5 * u, Color32::WHITE);
+            painter.circle_filled(to + Vec2::new(0.8, -1.5) * u, 0.5 * u, Color32::WHITE);
+        }
+    }
+}
+
+/// An Easter egg at `c`, `s` its size (1: about 10 points by 13), pale `color` with a pink zigzag
+/// and yellow dots.
+fn easter_egg(painter: &egui::Painter, c: Pos2, s: f32, color: Color32) {
+    let egg: Vec<Pos2> = (0..24).map(|i| { let a = i as f32 / 24.0 * std::f32::consts::TAU; c + Vec2::new(5.0 * a.cos(), 6.5 * a.sin() * if a.sin() < 0.0 { 1.12 } else { 1.0 }) * s }).collect();
+    painter.add(egui::Shape::convex_polygon(egg, color, Stroke::new(0.8 * s, Color32::from_rgb(200, 130, 160))));
+    let zig: Vec<Pos2> = (0..=6).map(|i| c + Vec2::new(-4.6 + i as f32 * 1.53, if i % 2 == 0 { -1.0 } else { 1.2 }) * s).collect();
+    painter.add(egui::Shape::line(zig, Stroke::new(1.2 * s, Color32::from_rgb(150, 110, 220))));
+    for d in [Vec2::new(-1.8, 3.4), Vec2::new(1.8, 3.4), Vec2::new(0.0, -4.0)] {
+        painter.circle_filled(c + d * s, 0.9 * s, Color32::from_rgb(250, 220, 80));
+    }
 }
 
 /// A sunflower's head at `c` (his units, upwards), `scale` its size: two rings of petals (hanging
@@ -369,6 +521,49 @@ mod skin_tests {
         assert!((0..60).any(|k| swap_at(SINKS + POPS * k as f32 / 60.0).is_some_and(|(_, sink)| sink < -0.05)));
         assert!(swap_at(SINKS + POPS - 0.001).is_some_and(|(_, sink)| sink.abs() < 0.02));
         assert_eq!(swap_at(SINKS + POPS), None);
+    }
+
+    /// Every plant, in every outfit, every way he may be (tipped over, squashed, hopping, hiding,
+    /// wilted, held, sinking): nothing drawn far from him (a stray point made a shape cover the screen).
+    #[test]
+    fn what_he_wears_stays_on_him() {
+        use super::{Look, Season, paint_chute, paint_matheo_as, paint_season};
+        let ctx = egui::Context::default();
+        let foot = egui::Pos2::new(500.0, 500.0);
+        let mut looks = vec![Look::default()];
+        for tilt in [-3.0f32, -1.2, -0.4, 0.4, 1.2, 3.0] {
+            looks.push(Look { tilt, ..Look::default() });
+        }
+        for (squash, hop, hide, wilt, sink) in [(0.3f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32), (-0.2, 20.0, 0.0, 0.0, 0.0), (0.0, 0.0, 1.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 0.0, 0.6), (0.0, 0.0, 0.0, 0.0, -0.1)] {
+            looks.push(Look { squash, hop, hide, wilt, sink, ..Look::default() });
+        }
+        looks.push(Look { held: true, wave: 1.0, extra: 3, flower: true, tired: true, glad: true, gaze: egui::Vec2::new(1.0, -1.0), ..Look::default() });
+        for skin in Skin::ALL {
+            for season in Season::ALL {
+                for (i, look) in looks.iter().enumerate() {
+                    let look = Look { skin, feast: Some(season), ..*look };
+                    for (now, open) in [(0.0, 0.0), (0.7, 0.05), (1.9, 0.3), (3.3, 1.0), (4.1, 1.08)] {
+                        let mut out = ctx.run_ui(Default::default(), |ui| {
+                            let painter = ui.ctx().layer_painter(egui::LayerId::background());
+                            paint_chute(&painter, foot, 1.0, look, open);
+                            paint_matheo_as(&painter, foot, 70.0, now, look);
+                            paint_season(&painter, foot, 70.0, now, look, season);
+                        });
+                        out.textures_delta.clear();
+                        // What is really drawn: the triangles, feathered edges and all.
+                        for shape in out.shapes {
+                            for prim in ctx.tessellate(vec![shape.clone()], 2.0) {
+                                if let egui::epaint::Primitive::Mesh(mesh) = prim.primitive {
+                                    for v in &mesh.vertices {
+                                        assert!(v.pos.is_finite() && (v.pos - foot).length() < 260.0, "{skin:?} {season:?} look {i} at {now}, open {open}: {:?} in {:?}", v.pos, shape.shape);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]
