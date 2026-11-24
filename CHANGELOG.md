@@ -4,6 +4,15 @@ Les nouveautés de chaque version de Mathéo. La section d'une version sert auss
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-24
+
+- **Tes verres d’eau du jour** : chaque arrosage compte (« Et de 3 verres d’eau aujourd’hui ! »), et le soir il fait le bilan, sans jamais faire la morale si tu n’as rien bu.
+- **« Ça va aujourd’hui ? »** : certains jours, il te pose la question avec un pouce levé et un pouce baissé dans sa bulle, et te répond avec un mot gentil ou encourageant. Il te propose même de te défouler en l’envoyant valser.
+- **Les fêtes** : à Noël, au Nouvel An, à la Saint-Valentin, à Pâques et à Halloween, il glisse un mot de saison de temps en temps. Paloma et Hélio ont chacun leur accessoire : écharpe et petit bonnet, étoile et couronne, cœurs, œuf et poussin, citrouille et araignée.
+- **Beaucoup plus de phrases** : de nouvelles variantes pour l’eau, les étirements, la posture, les yeux, les pauses, le repas, le soir…
+- **Pour tout le monde, pas que les développeurs** : « le code sera encore là demain » devient « le travail sera encore là demain », et les autres phrases de développeur ont été réécrites.
+- **Corrigé sous Linux** : il n’apparaît plus dans la barre des tâches comme une app ouverte, une fois par écran.
+
 ## [0.3.0] - 2026-11-23
 
 - **Trois tenues au choix** (clic droit, « Mon apparence… ») : la plante verte, Paloma le cactus (côtes, épines, deux bras qui font coucou) ou Hélio le tournesol, dont le cœur se tourne vers ta souris. Il reste Mathéo, avec le même pot et le même visage. Quand tu changes de tenue, l’ancienne s’enfonce dans la terre et la nouvelle jaillit en faisant voler la terre.
